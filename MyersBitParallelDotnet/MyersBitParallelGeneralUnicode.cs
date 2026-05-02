@@ -6,246 +6,244 @@ using System.Runtime.CompilerServices;
 using System.Text;
 #endif
 
-namespace MyersBitParallel
+namespace MyersBitParallel;
+
+/// <summary>
+/// Unicode Levenshtein engine without the 64-character pattern length
+/// limit. Operates on Unicode scalar values (code points) and uses a
+/// dynamic-programming kernel; future versions may upgrade to a blocked
+/// Myers bit-parallel kernel without changing the public API.
+/// </summary>
+public sealed class MyersBitParallelGeneralUnicode
 {
+    public static readonly MyersBitParallelGeneralUnicode CaseSensitive = new MyersBitParallelGeneralUnicode(UnicodeMappers.Identity);
+    public static readonly MyersBitParallelGeneralUnicode CaseInsensitive = new MyersBitParallelGeneralUnicode(UnicodeMappers.SimpleInvariantCaseFold);
+
+#if NET5_0_OR_GREATER
+    private readonly Func<Rune, Rune> _runeMapper;
+
     /// <summary>
-    /// Unicode Levenshtein engine without the 64-character pattern length
-    /// limit. Operates on Unicode scalar values (code points) and uses a
-    /// dynamic-programming kernel; future versions may upgrade to a blocked
-    /// Myers bit-parallel kernel without changing the public API.
+    /// Construct an engine that normalizes every rune through
+    /// <paramref name="runeMapper"/> before comparing.
     /// </summary>
-    public sealed class MyersBitParallelGeneralUnicode : IMyersBitParallel
+    public MyersBitParallelGeneralUnicode(Func<Rune, Rune> runeMapper)
     {
-#if NET5_0_OR_GREATER
-        private readonly Func<Rune, Rune> _runeMapper;
-
-        /// <summary>
-        /// Construct an engine using
-        /// <see cref="UnicodeMappers.SimpleInvariantCaseFold(Rune)"/>.
-        /// </summary>
-        public MyersBitParallelGeneralUnicode() : this(UnicodeMappers.SimpleInvariantCaseFold) { }
-
-        /// <summary>
-        /// Construct an engine that normalizes every rune through
-        /// <paramref name="runeMapper"/> before comparing.
-        /// </summary>
-        public MyersBitParallelGeneralUnicode(Func<Rune, Rune> runeMapper)
-        {
-            _runeMapper = runeMapper ?? throw new ArgumentNullException(nameof(runeMapper));
-        }
+        _runeMapper = runeMapper ?? throw new ArgumentNullException(nameof(runeMapper));
+    }
 #else
-        private readonly Func<int, int> _codePointMapper;
+    private readonly Func<int, int> _codePointMapper;
 
-        /// <summary>
-        /// Construct an engine using
-        /// <see cref="UnicodeMappers.SimpleInvariantCaseFold(int)"/>.
-        /// </summary>
-        public MyersBitParallelGeneralUnicode() : this(UnicodeMappers.SimpleInvariantCaseFold) { }
-
-        /// <summary>
-        /// Construct an engine that normalizes every code point through
-        /// <paramref name="codePointMapper"/> before comparing.
-        /// </summary>
-        public MyersBitParallelGeneralUnicode(Func<int, int> codePointMapper)
-        {
-            _codePointMapper = codePointMapper ?? throw new ArgumentNullException(nameof(codePointMapper));
-        }
+    /// <summary>
+    /// Construct an engine that normalizes every code point through
+    /// <paramref name="codePointMapper"/> before comparing.
+    /// </summary>
+    public MyersBitParallelGeneralUnicode(Func<int, int> codePointMapper)
+    {
+        _codePointMapper = codePointMapper ?? throw new ArgumentNullException(nameof(codePointMapper));
+    }
 #endif
 
-        /// <inheritdoc />
-        public MyersPattern Prepare(string pattern)
-        {
-            if (pattern == null) throw new ArgumentNullException(nameof(pattern));
+    /// <summary>
+    /// Build a reusable <see cref="MyersPatternGeneralUnicode"/> handle
+    /// for <paramref name="pattern"/>.
+    /// </summary>
+    public MyersPatternGeneralUnicode Prepare(string pattern)
+    {
+        if (pattern.Length == 0)
+            return new MyersPatternGeneralUnicode(null, 0);
 
-            int[]? codes = ToMappedCodePoints(pattern, out int count);
-            return new GeneralUnicodePattern(this, codes, count);
+        int[] codes = ToMappedCodePoints(pattern, out int count);
+        return new MyersPatternGeneralUnicode(codes, count);
+    }
+
+    /// <summary>
+    /// Compute the Levenshtein distance between <paramref name="a"/> and
+    /// <paramref name="b"/>, preparing and disposing a transient pattern
+    /// for <paramref name="a"/>.
+    /// </summary>
+    public int Distance(string a, string b)
+    {
+        using MyersPatternGeneralUnicode pat = Prepare(a);
+        return Distance(in pat, b);
+    }
+
+    /// <summary>
+    /// Compute the Levenshtein distance between an already-prepared
+    /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// </summary>
+    public int Distance(in MyersPatternGeneralUnicode pattern, string candidate)
+    {
+        if (candidate.Length == 0)
+            return pattern.Length;
+
+        int[] bCodes = ToMappedCodePoints(candidate, out int n);
+        try
+        {
+            return DistanceCore(in pattern, bCodes, n);
+        }
+        finally
+        {
+            ArrayPool<int>.Shared.Return(bCodes, clearArray: false);
+        }
+    }
+
+    /// <summary>
+    /// Compute distance and similarity ratio between <paramref name="a"/>
+    /// and <paramref name="b"/>, preparing and disposing a transient
+    /// pattern for <paramref name="a"/>.
+    /// </summary>
+    public SimilarityRatio SimilarityRatio(string a, string b)
+    {
+        using MyersPatternGeneralUnicode pat = Prepare(a);
+        return SimilarityRatio(in pat, b);
+    }
+
+    /// <summary>
+    /// Compute distance and similarity ratio between an already-prepared
+    /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// </summary>
+    public SimilarityRatio SimilarityRatio(in MyersPatternGeneralUnicode pattern, string candidate)
+    {
+        if (candidate.Length == 0)
+        {
+            int distance = pattern.Length;
+            int maxLen = pattern.Length;
+            double ratio = maxLen == 0 ? 1.0 : 0.0;
+            return new SimilarityRatio(distance, ratio);
         }
 
-        /// <inheritdoc />
-        public int Distance(string a, string b)
+        int[] bCodes = ToMappedCodePoints(candidate, out int n);
+        try
         {
-            if (a == null) throw new ArgumentNullException(nameof(a));
-            if (b == null) throw new ArgumentNullException(nameof(b));
-            using MyersPattern pat = Prepare(a);
-            return DistanceCore((GeneralUnicodePattern)pat, b);
+            int distance = DistanceCore(in pattern, bCodes, n);
+            int maxLen = pattern.Length >= n ? pattern.Length : n;
+            double ratio = maxLen == 0 ? 1.0 : 1.0 - ((double)distance / maxLen);
+            return new SimilarityRatio(distance, ratio);
         }
-
-        /// <inheritdoc />
-        public int Distance(MyersPattern pattern, string candidate)
+        finally
         {
-            GeneralUnicodePattern p = ValidatePattern(pattern);
-            if (candidate == null) throw new ArgumentNullException(nameof(candidate));
-            return DistanceCore(p, candidate);
+            ArrayPool<int>.Shared.Return(bCodes, clearArray: false);
         }
+    }
 
-        /// <inheritdoc />
-        public SimilarityRatio SimilarityRatio(string a, string b)
-        {
-            if (a == null) throw new ArgumentNullException(nameof(a));
-            if (b == null) throw new ArgumentNullException(nameof(b));
-            using MyersPattern pat = Prepare(a);
-            return RatioFromCandidate((GeneralUnicodePattern)pat, b);
-        }
+    private static int DistanceCore(in MyersPatternGeneralUnicode p, int[] bCodes, int n)
+    {
+        int m = p.Length;
+        if (m == 0) return n;
 
-        /// <inheritdoc />
-        public SimilarityRatio SimilarityRatio(MyersPattern pattern, string candidate)
-        {
-            GeneralUnicodePattern p = ValidatePattern(pattern);
-            if (candidate == null) throw new ArgumentNullException(nameof(candidate));
-            return RatioFromCandidate(p, candidate);
-        }
+        int[] aCodes = p.Codes!;
 
-        private SimilarityRatio RatioFromCandidate(GeneralUnicodePattern p, string candidate)
+        int[] prev = ArrayPool<int>.Shared.Rent(n + 1);
+        int[] curr = ArrayPool<int>.Shared.Rent(n + 1);
+        try
         {
-            int[] bCodes = ToMappedCodePoints(candidate, out int n);
-            try
+            for (int j = 0; j <= n; j++)
+                prev[j] = j;
+
+            for (int i = 1; i <= m; i++)
             {
-                int distance = DistanceCore(p, bCodes, n);
-                int maxLen = p.Length >= n ? p.Length : n;
-                double ratio = maxLen == 0 ? 1.0 : 1.0 - ((double)distance / maxLen);
-                return new SimilarityRatio(distance, ratio);
-            }
-            finally
-            {
-                ArrayPool<int>.Shared.Return(bCodes, clearArray: false);
-            }
-        }
-
-        private GeneralUnicodePattern ValidatePattern(MyersPattern pattern)
-        {
-            if (pattern == null)
-                throw new ArgumentNullException(nameof(pattern));
-            if (pattern is not GeneralUnicodePattern p || !ReferenceEquals(p.Owner, this))
-                throw new ArgumentException(
-                    "Pattern was not created by this engine instance.",
-                    nameof(pattern));
-            if (p.IsDisposed)
-                throw new ObjectDisposedException(nameof(MyersPattern));
-            return p;
-        }
-
-        private int DistanceCore(GeneralUnicodePattern p, string candidate)
-        {
-            int[] bCodes = ToMappedCodePoints(candidate, out int n);
-            try
-            {
-                return DistanceCore(p, bCodes, n);
-            }
-            finally
-            {
-                ArrayPool<int>.Shared.Return(bCodes, clearArray: false);
-            }
-        }
-
-        private static int DistanceCore(GeneralUnicodePattern p, int[] bCodes, int n)
-        {
-            int m = p.Length;
-            if (m == 0) return n;
-            if (n == 0) return m;
-
-            int[] aCodes = p.Codes!;
-
-            int[] prev = ArrayPool<int>.Shared.Rent(n + 1);
-            int[] curr = ArrayPool<int>.Shared.Rent(n + 1);
-            try
-            {
-                for (int j = 0; j <= n; j++)
-                    prev[j] = j;
-
-                for (int i = 1; i <= m; i++)
+                curr[0] = i;
+                int ai = aCodes[i - 1];
+                for (int j = 1; j <= n; j++)
                 {
-                    curr[0] = i;
-                    int ai = aCodes[i - 1];
-                    for (int j = 1; j <= n; j++)
-                    {
-                        int cost = ai == bCodes[j - 1] ? 0 : 1;
-                        int del = prev[j] + 1;
-                        int ins = curr[j - 1] + 1;
-                        int sub = prev[j - 1] + cost;
-                        int min = del < ins ? del : ins;
-                        if (sub < min) min = sub;
-                        curr[j] = min;
-                    }
-                    int[] tmp = prev; prev = curr; curr = tmp;
+                    int cost = ai == bCodes[j - 1] ? 0 : 1;
+                    int del = prev[j] + 1;
+                    int ins = curr[j - 1] + 1;
+                    int sub = prev[j - 1] + cost;
+                    int min = del < ins ? del : ins;
+                    if (sub < min) min = sub;
+                    curr[j] = min;
                 }
+                int[] tmp = prev; prev = curr; curr = tmp;
+            }
 
-                return prev[n];
-            }
-            finally
-            {
-                ArrayPool<int>.Shared.Return(prev, clearArray: false);
-                ArrayPool<int>.Shared.Return(curr, clearArray: false);
-            }
+            return prev[n];
         }
-
-        private int[] ToMappedCodePoints(string s, out int count)
+        finally
         {
-            // Code-point count is at most s.Length; rent at least one slot so
-            // the caller can safely return an empty buffer to the pool.
-            int[] buffer = ArrayPool<int>.Shared.Rent(s.Length == 0 ? 1 : s.Length);
-            int n = 0;
+            ArrayPool<int>.Shared.Return(prev, clearArray: false);
+            ArrayPool<int>.Shared.Return(curr, clearArray: false);
+        }
+    }
+
+    private int[] ToMappedCodePoints(string s, out int count)
+    {
+        int[] buffer = ArrayPool<int>.Shared.Rent(s.Length);
+        int n = 0;
 
 #if NET5_0_OR_GREATER
-            foreach (Rune r in s.EnumerateRunes())
-            {
-                buffer[n++] = _runeMapper(r).Value;
-            }
+        foreach (Rune r in s.EnumerateRunes())
+        {
+            buffer[n++] = _runeMapper(r).Value;
+        }
 #else
-            int i = 0;
-            while (i < s.Length)
-            {
-                int cp = ReadCodePoint(s, ref i);
-                buffer[n++] = _codePointMapper(cp);
-            }
+        int i = 0;
+        while (i < s.Length)
+        {
+            int cp = ReadCodePoint(s, ref i);
+            buffer[n++] = _codePointMapper(cp);
+        }
 #endif
 
-            count = n;
-            return buffer;
-        }
+        count = n;
+        return buffer;
+    }
 
 #if !NET5_0_OR_GREATER
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int ReadCodePoint(string s, ref int index)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ReadCodePoint(string s, ref int index)
+    {
+        char c = s[index];
+        if (char.IsHighSurrogate(c) && index + 1 < s.Length)
         {
-            char c = s[index];
-            if (char.IsHighSurrogate(c) && index + 1 < s.Length)
+            char c2 = s[index + 1];
+            if (char.IsLowSurrogate(c2))
             {
-                char c2 = s[index + 1];
-                if (char.IsLowSurrogate(c2))
-                {
-                    index += 2;
-                    return char.ConvertToUtf32(c, c2);
-                }
+                index += 2;
+                return char.ConvertToUtf32(c, c2);
             }
-            index++;
-            return c;
         }
+        index++;
+        return c;
+    }
 #endif
+}
 
-        private sealed class GeneralUnicodePattern : MyersPattern
+/// <summary>
+/// Reusable, prepared pattern handle produced by
+/// <see cref="MyersBitParallelGeneralUnicode.Prepare(string)"/>. Holds an
+/// <see cref="ArrayPool{T}"/>-rented buffer of mapped code points.
+/// </summary>
+public readonly struct MyersPatternGeneralUnicode : IDisposable
+{
+    /// <summary>
+    /// Mapped pattern code points in source order: <c>Codes[i]</c> is the
+    /// encoded scalar value at pattern position <c>i</c>. Used directly by
+    /// the DP kernel.
+    /// </summary>
+    internal readonly int[]? Codes;
+
+    /// <summary>
+    /// Length of the pattern in Unicode scalar values.
+    /// </summary>
+    public readonly int Length;
+
+    internal MyersPatternGeneralUnicode(int[]? codes, int length)
+    {
+        Codes = codes;
+        Length = length;
+    }
+
+    /// <summary>
+    /// Return the rented code-point buffer to the shared pool. Calling
+    /// this more than once on the same value returns the buffer twice and
+    /// is the caller's responsibility to avoid.
+    /// </summary>
+    public void Dispose()
+    {
+        if (Codes != null)
         {
-            internal readonly MyersBitParallelGeneralUnicode Owner;
-            internal int[]? Codes;
-
-            internal bool IsDisposed { get; private set; }
-
-            internal GeneralUnicodePattern(MyersBitParallelGeneralUnicode owner, int[]? codes, int length)
-                : base(length)
-            {
-                Owner = owner;
-                Codes = codes;
-            }
-
-            public override void Dispose()
-            {
-                if (IsDisposed) return;
-                IsDisposed = true;
-                if (Codes != null)
-                {
-                    ArrayPool<int>.Shared.Return(Codes, clearArray: false);
-                    Codes = null;
-                }
-            }
+            ArrayPool<int>.Shared.Return(Codes, clearArray: false);
         }
     }
 }

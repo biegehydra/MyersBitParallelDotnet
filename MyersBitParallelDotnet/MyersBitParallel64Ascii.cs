@@ -12,8 +12,12 @@ namespace MyersBitParallel;
 /// reads from a constructor-built <c>byte[256]</c> mapping table and
 /// never invokes a user-provided delegate.
 /// </summary>
-public sealed class MyersBitParallel64Ascii : IMyersBitParallel
+public sealed class MyersBitParallel64Ascii
 {
+    public static readonly MyersBitParallel64Ascii CaseSensitive = new MyersBitParallel64Ascii(AsciiMappers.CaseSensitive);
+    public static readonly MyersBitParallel64Ascii CaseInsensitive = new MyersBitParallel64Ascii(AsciiMappers.CaseInsensitive);
+
+
     /// <summary>
     /// Maximum number of pattern characters that can fit into the single
     /// <see cref="ulong"/> bit-vector used by this engine.
@@ -21,6 +25,7 @@ public sealed class MyersBitParallel64Ascii : IMyersBitParallel
     public const int MaxPatternLength = 64;
 
     private readonly byte[] _map;
+
 
     /// <summary>
     /// Construct an engine that builds its 256-entry lookup table by
@@ -31,22 +36,24 @@ public sealed class MyersBitParallel64Ascii : IMyersBitParallel
         if (charMapper == null) throw new ArgumentNullException(nameof(charMapper));
         _map = new byte[256];
         for (int i = 0; i < 256; i++)
-        {
             _map[i] = charMapper((char)i);
-        }
     }
 
-    /// <inheritdoc />
-    public MyersPattern Prepare(string pattern)
+    /// <summary>
+    /// Build a reusable <see cref="MyersPattern64Ascii"/> handle for
+    /// <paramref name="pattern"/>. The caller owns the returned struct and
+    /// must <see cref="MyersPattern64Ascii.Dispose"/> it when finished.
+    /// </summary>
+    public MyersPattern64Ascii Prepare(string pattern)
     {
-        if (pattern == null) throw new ArgumentNullException(nameof(pattern));
         int m = pattern.Length;
         if (m > MaxPatternLength)
-        {
             throw new ArgumentException(
                 $"Pattern length {m} exceeds the {MaxPatternLength}-symbol limit of {nameof(MyersBitParallel64Ascii)}.",
                 nameof(pattern));
-        }
+
+        if (m == 0)
+            return new MyersPattern64Ascii(null, 0, 0UL, 0UL);
 
         // 256 slots so any byte value the user-supplied mapper might emit
         // can be indexed directly without further bookkeeping.
@@ -61,85 +68,41 @@ public sealed class MyersBitParallel64Ascii : IMyersBitParallel
         }
 
         // Avoid (1UL << 64) which is undefined in C#; saturate at MaxValue.
-        ulong maskAll = m == 0
-            ? 0UL
-            : (m == 64 ? ulong.MaxValue : (1UL << m) - 1UL);
-        ulong lastBitMask = m == 0 ? 0UL : 1UL << (m - 1);
+        ulong maskAll = m == 64 ? ulong.MaxValue : (1UL << m) - 1UL;
+        ulong lastBitMask = 1UL << (m - 1);
 
-        return new Ascii64Pattern(this, masks, m, lastBitMask, maskAll);
+        return new MyersPattern64Ascii(masks, m, lastBitMask, maskAll);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Compute the Levenshtein distance between <paramref name="a"/> and
+    /// <paramref name="b"/>, preparing and disposing a transient pattern
+    /// for <paramref name="a"/>.
+    /// </summary>
     public int Distance(string a, string b)
     {
-        if (a == null) throw new ArgumentNullException(nameof(a));
-        if (b == null) throw new ArgumentNullException(nameof(b));
-        using MyersPattern pat = Prepare(a);
-        return DistanceCore((Ascii64Pattern)pat, b);
+        using MyersPattern64Ascii pat = Prepare(a);
+        return Distance(in pat, b);
     }
 
-    /// <inheritdoc />
-    public int Distance(MyersPattern pattern, string candidate)
+    /// <summary>
+    /// Compute the Levenshtein distance between an already-prepared
+    /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// </summary>
+    public int Distance(in MyersPattern64Ascii pattern, string candidate)
     {
-        Ascii64Pattern p = ValidatePattern(pattern);
-        if (candidate == null) throw new ArgumentNullException(nameof(candidate));
-        return DistanceCore(p, candidate);
-    }
-
-    /// <inheritdoc />
-    public SimilarityRatio SimilarityRatio(string a, string b)
-    {
-        if (a == null) throw new ArgumentNullException(nameof(a));
-        if (b == null) throw new ArgumentNullException(nameof(b));
-        using MyersPattern pat = Prepare(a);
-        int distance = DistanceCore((Ascii64Pattern)pat, b);
-        return BuildRatio(distance, a.Length, b.Length);
-    }
-
-    /// <inheritdoc />
-    public SimilarityRatio SimilarityRatio(MyersPattern pattern, string candidate)
-    {
-        Ascii64Pattern p = ValidatePattern(pattern);
-        if (candidate == null) throw new ArgumentNullException(nameof(candidate));
-        int distance = DistanceCore(p, candidate);
-        return BuildRatio(distance, p.Length, candidate.Length);
-    }
-
-    private static SimilarityRatio BuildRatio(int distance, int aLen, int bLen)
-    {
-        int maxLen = aLen >= bLen ? aLen : bLen;
-        double ratio = maxLen == 0 ? 1.0 : 1.0 - ((double)distance / maxLen);
-        return new SimilarityRatio(distance, ratio);
-    }
-
-    private Ascii64Pattern ValidatePattern(MyersPattern pattern)
-    {
-        if (pattern == null)
-            throw new ArgumentNullException(nameof(pattern));
-        if (pattern is not Ascii64Pattern p || !ReferenceEquals(p.Owner, this))
-            throw new ArgumentException(
-                "Pattern was not created by this engine instance.",
-                nameof(pattern));
-        if (p.PatternMasks is null)
-            throw new ObjectDisposedException(nameof(MyersPattern));
-        return p;
-    }
-
-    private int DistanceCore(Ascii64Pattern p, string candidate)
-    {
-        int m = p.Length;
+        int m = pattern.Length;
         int n = candidate.Length;
         if (m == 0) return n;
         if (n == 0) return m;
 
-        ulong maskAll = p.MaskAll;
-        ulong lastBitMask = p.LastBitMask;
+        ulong maskAll = pattern.MaskAll;
+        ulong lastBitMask = pattern.LastBitMask;
         ulong VP = maskAll;
         ulong VN = 0UL;
         int score = m;
 
-        ulong[] masks = p.PatternMasks!;
-        ref ulong patternRef = ref ArrayHelpers.GetArrayDataReference(masks);
+        ref ulong patternRef = ref ArrayHelpers.GetArrayDataReference(pattern.Masks!);
         ref byte mapRef = ref ArrayHelpers.GetArrayDataReference(_map);
         ref char candRef = ref MemoryMarshal.GetReference(candidate.AsSpan());
 
@@ -167,35 +130,79 @@ public sealed class MyersBitParallel64Ascii : IMyersBitParallel
         return score;
     }
 
-    private sealed class Ascii64Pattern : MyersPattern
+    /// <summary>
+    /// Compute distance and similarity ratio between <paramref name="a"/>
+    /// and <paramref name="b"/>, preparing and disposing a transient
+    /// pattern for <paramref name="a"/>.
+    /// </summary>
+    public SimilarityRatio SimilarityRatio(string a, string b)
     {
-        internal readonly MyersBitParallel64Ascii Owner;
-        internal ulong[]? PatternMasks;
-        internal readonly ulong MaskAll;
-        internal readonly ulong LastBitMask;
+        using MyersPattern64Ascii pat = Prepare(a);
+        int distance = Distance(in pat, b);
+        return BuildRatio(distance, a.Length, b.Length);
+    }
 
-        internal Ascii64Pattern(
-            MyersBitParallel64Ascii owner,
-            ulong[] patternMasks,
-            int length,
-            ulong lastBitMask,
-            ulong maskAll)
-            : base(length)
-        {
-            Owner = owner;
-            PatternMasks = patternMasks;
-            LastBitMask = lastBitMask;
-            MaskAll = maskAll;
-        }
+    /// <summary>
+    /// Compute distance and similarity ratio between an already-prepared
+    /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// </summary>
+    public SimilarityRatio SimilarityRatio(in MyersPattern64Ascii pattern, string candidate)
+    {
+        int distance = Distance(in pattern, candidate);
+        return BuildRatio(distance, pattern.Length, candidate.Length);
+    }
 
-        public override void Dispose()
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static SimilarityRatio BuildRatio(int distance, int aLen, int bLen)
+    {
+        int maxLen = aLen >= bLen ? aLen : bLen;
+        double ratio = maxLen == 0 ? 1.0 : 1.0 - ((double)distance / maxLen);
+        return new SimilarityRatio(distance, ratio);
+    }
+}
+
+/// <summary>
+/// Reusable, prepared pattern handle produced by
+/// <see cref="MyersBitParallel64Ascii.Prepare(string)"/>. Holds an
+/// <see cref="ArrayPool{T}"/>-rented bit-mask table that callers must
+/// release via <see cref="Dispose"/>.
+/// </summary>
+public readonly struct MyersPattern64Ascii : IDisposable
+{
+    /// <summary>
+    /// Bit-mask table indexed by mapped symbol value: <c>Masks[s]</c> is the
+    /// bitmap of pattern positions at which symbol <c>s</c> appears. Sized
+    /// to 256 entries so any byte from the engine's lookup table indexes it
+    /// directly.
+    /// </summary>
+    internal readonly ulong[]? Masks;
+    internal readonly ulong LastBitMask;
+    internal readonly ulong MaskAll;
+
+    /// <summary>
+    /// Length of the pattern in <see cref="char"/> units, in the range
+    /// <c>[0, <see cref="MyersBitParallel64Ascii.MaxPatternLength"/>]</c>.
+    /// </summary>
+    public readonly int Length;
+
+    internal MyersPattern64Ascii(ulong[]? masks, int length, ulong lastBitMask, ulong maskAll)
+    {
+        Masks = masks;
+        Length = length;
+        LastBitMask = lastBitMask;
+        MaskAll = maskAll;
+    }
+
+    /// <summary>
+    /// Return the rented bit-mask buffer to the shared pool. Calling this
+    /// more than once on the same value returns the buffer twice and is
+    /// the caller's responsibility to avoid.
+    /// </summary>
+    public void Dispose()
+    {
+        if (Masks != null)
         {
-            ulong[]? toReturn = PatternMasks;
-            if (toReturn != null)
-            {
-                PatternMasks = null;
-                ArrayPool<ulong>.Shared.Return(toReturn, clearArray: false);
-            }
+            ArrayPool<ulong>.Shared.Return(Masks, clearArray: false);
         }
     }
 }
