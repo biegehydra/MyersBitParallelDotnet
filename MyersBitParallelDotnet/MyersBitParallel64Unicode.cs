@@ -282,7 +282,7 @@ public sealed class MyersBitParallel64Unicode
 /// <see cref="MyersBitParallel64Unicode.Prepare(string)"/>. Holds a
 /// dictionary of bit masks keyed by mapped code point.
 /// </summary>
-public readonly struct MyersPattern64Unicode : IDisposable
+public readonly struct MyersPattern64Unicode
 {
     /// <summary>
     /// Bit-mask table keyed by mapped Unicode scalar value: <c>Masks[s]</c>
@@ -306,14 +306,5 @@ public readonly struct MyersPattern64Unicode : IDisposable
         Length = length;
         LastBitMask = lastBitMask;
         MaskAll = maskAll;
-    }
-
-    /// <summary>
-    /// No-op for this engine; the underlying mask dictionary is reclaimed
-    /// by the GC. Provided so this struct fits the standard
-    /// <c>using</c>-disposable pattern.
-    /// </summary>
-    public void Dispose()
-    {
     }
 }
