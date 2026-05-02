@@ -36,7 +36,9 @@ public sealed class MyersBitParallel64Ascii
         if (charMapper == null) throw new ArgumentNullException(nameof(charMapper));
         _map = new byte[256];
         for (int i = 0; i < 256; i++)
+        {
             _map[i] = charMapper((char)i);
+        }
     }
 
     /// <summary>
@@ -48,12 +50,16 @@ public sealed class MyersBitParallel64Ascii
     {
         int m = pattern.Length;
         if (m > MaxPatternLength)
+        {
             throw new ArgumentException(
                 $"Pattern length {m} exceeds the {MaxPatternLength}-symbol limit of {nameof(MyersBitParallel64Ascii)}.",
                 nameof(pattern));
+        }
 
         if (m == 0)
+        {
             return new MyersPattern64Ascii(null, 0, 0UL, 0UL, 0UL, 0);
+        }
 
         // 256 slots so any byte value the user-supplied mapper might emit
         // can be indexed directly without further bookkeeping.
@@ -184,7 +190,10 @@ public sealed class MyersBitParallel64Ascii
     private ulong BuildCharMaskCore(string s)
     {
         int n = s.Length;
-        if (n == 0) return 0UL;
+        if (n == 0)
+        {
+            return 0UL;
+        }
 
         ulong mask = 0UL;
         ref byte mapRef = ref ArrayHelpers.GetArrayDataReference(_map);
@@ -228,15 +237,21 @@ public sealed class MyersBitParallel64Ascii
             VP = (HN << 1) | (~(X | D0) & maskAll);
 
             if ((HP & lastBitMask) != 0)
+            {
                 score++;
+            }
             else if ((HN & lastBitMask) != 0)
+            {
                 score--;
+            }
 
             // Even if every remaining char decreases the score by 1, can
             // we still finish at <= maxDist? If not, the answer is "too far".
             int remaining = n - i - 1;
             if (score - remaining > maxDist)
+            {
                 return int.MaxValue;
+            }
         }
 
         return score <= maxDist ? score : int.MaxValue;

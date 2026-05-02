@@ -10,8 +10,6 @@ using MyersBitParallelDotnet.Benchmarks;
 //   OneToOne64AsciiBenchmark            - 1:1 ASCII pairs through MyersBitParallel64Ascii
 //   OneToMany64AsciiBenchmark           - 1:N ASCII through MyersBitParallel64Ascii
 //   OneToManyMaxDist64AsciiBenchmark    - 1:N ASCII with maxDist + requiredCharMask pruning
-//   OneToOne64UnicodeBenchmark          - 1:1 Unicode pairs through MyersBitParallel64Unicode
-//   OneToMany64UnicodeBenchmark         - 1:N Unicode through MyersBitParallel64Unicode
 
 var config = DefaultConfig.Instance
     .AddJob(Job.ShortRun);

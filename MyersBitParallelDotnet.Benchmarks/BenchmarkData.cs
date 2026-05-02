@@ -36,35 +36,6 @@ public static class BenchmarkData
     ];
 
     /// <summary>
-    /// ~100 international city names mixing Latin-1 supplement, Latin
-    /// extended, CJK BMP, and a handful of surrogate-pair samples.
-    /// </summary>
-    public static readonly string[] UnicodeCities =
-    [
-        "São Paulo", "Rio de Janeiro", "Brasília", "Salvador", "Belém",
-        "México", "Mérida", "Cancún", "León", "Querétaro",
-        "Bogotá", "Medellín", "Cúcuta", "Cartagena", "Barranquilla",
-        "Buenos Aires", "Córdoba", "Mendoza", "Tucumán", "Resistencia",
-        "Santiago", "Concepción", "Valparaíso", "Antofagasta", "Iquique",
-        "Madrid", "Barcelona", "Sevilla", "Málaga", "Zaragoza",
-        "Valencia", "Bilbao", "Granada", "A Coruña", "Logroño",
-        "Paris", "Marseille", "Bordeaux", "Toulouse", "Nantes",
-        "Lyon", "Strasbourg", "Montpellier", "Nice", "Rennes",
-        "München", "Köln", "Düsseldorf", "Nürnberg", "Stuttgart",
-        "Frankfurt am Main", "Würzburg", "Lübeck", "Saarbrücken", "Osnabrück",
-        "Wien", "Salzburg", "Innsbruck", "Linz", "Graz",
-        "Zürich", "Genève", "Bern", "Lausanne", "Basel",
-        "København", "Århus", "Odense", "Ålborg", "Esbjerg",
-        "Stockholm", "Göteborg", "Malmö", "Helsingborg", "Västerås",
-        "Helsinki", "Tampere", "Jyväskylä", "Lahti", "Pori",
-        "Warszawa", "Kraków", "Łódź", "Wrocław", "Poznań",
-        "Praha", "Brno", "Plzeň", "Liberec", "České Budějovice",
-        "東京", "大阪", "京都", "横浜", "札幌",
-        "北京", "上海", "广州", "深圳", "成都",
-        "首爾", "釜山", "仁川", "🌴 Hawaii", "🗼 Tokyo",
-    ];
-
-    /// <summary>
     /// Build <paramref name="targetCount"/> noisy candidates by repeatedly
     /// permuting strings drawn round-robin from <paramref name="originals"/>.
     /// Deterministic for a given <paramref name="seed"/>.

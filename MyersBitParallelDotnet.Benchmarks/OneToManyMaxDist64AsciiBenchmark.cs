@@ -36,6 +36,7 @@ public class OneToManyMaxDist64AsciiBenchmark
     private string _query = null!;
     private string[] _candidates = null!;
     private ulong _requiredCharMask;
+    private ulong _partialRequiredCharMask;
 
     private static readonly MyersBitParallel64Ascii Engine = MyersBitParallel64Ascii.CaseInsensitive;
 
@@ -45,6 +46,12 @@ public class OneToManyMaxDist64AsciiBenchmark
         _query = BenchmarkData.AsciiCities[0];
         _candidates = BenchmarkData.BuildNoisyCandidates(BenchmarkData.AsciiCities, CandidateCount);
         _requiredCharMask = Engine.BuildCharMask(_query);
+        // lets say we know 1/2 the characters that should exist
+        if (_query.Length > 1)
+        {
+            var start = Random.Shared.Next() % (_query.Length / 2);
+            _partialRequiredCharMask = Engine.BuildCharMask(new string(_query.Skip(start).ToArray()));
+        }
     }
 
     [Benchmark(Baseline = true)]
@@ -81,6 +88,22 @@ public class OneToManyMaxDist64AsciiBenchmark
         using MyersPattern64Ascii pat = Engine.Prepare(_query);
         int maxDist = MaxDist;
         ulong required = _requiredCharMask;
+        for (int i = 0; i < _candidates.Length; i++)
+        {
+            int d = Engine.Distance(in pat, _candidates[i], maxDist, required);
+            if (d != int.MaxValue) sum += d;
+        }
+        return sum;
+    }
+
+
+    [Benchmark]
+    public long Myers_PreparedOnce_WithMaxDist_AndPartialRequiredCharMask()
+    {
+        long sum = 0;
+        using MyersPattern64Ascii pat = Engine.Prepare(_query);
+        int maxDist = MaxDist;
+        ulong required = _partialRequiredCharMask;
         for (int i = 0; i < _candidates.Length; i++)
         {
             int d = Engine.Distance(in pat, _candidates[i], maxDist, required);

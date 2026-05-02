@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 
 namespace MyersBitParallelDotnet.Tests;
 
@@ -10,8 +9,7 @@ namespace MyersBitParallelDotnet.Tests;
 public static class TestCases
 {
     /// <summary>
-    /// Pure-ASCII cases that fit inside the 64-symbol pattern limit. Safe to
-    /// run on every engine (ASCII or Unicode, 64 or general).
+    /// Pure-ASCII cases that fit inside the 64-symbol pattern limit.
     /// </summary>
     public static IEnumerable<object[]> Ascii()
     {
@@ -105,81 +103,5 @@ public static class TestCases
         // Larger gaps.
         yield return new object[] { "SHORT", "LONGERSTRING", 10 };
         yield return new object[] { "ABCDEF", "GHIJKL", 6 };
-    }
-
-    /// <summary>
-    /// Unicode cases that fit inside the 64-symbol scalar-value limit.
-    /// Distances are reported in Unicode scalar values, not <see cref="char"/>
-    /// units, so cases involving surrogate pairs intentionally differ from
-    /// what an ASCII engine would compute.
-    /// </summary>
-    public static IEnumerable<object[]> Unicode()
-    {
-        // Non-ASCII BMP (Latin-1 supplement, diacritics).
-        yield return new object[] { "café", "café", 0 };
-        yield return new object[] { "café", "cafe", 1 };
-        yield return new object[] { "café", "caf", 1 };
-        yield return new object[] { "naïve", "naive", 1 };
-        yield return new object[] { "résumé", "resume", 2 };
-        yield return new object[] { "über", "uber", 1 };
-
-        // CJK BMP.
-        yield return new object[] { "你好", "你好", 0 };
-        yield return new object[] { "你好", "你好世界", 2 };
-        yield return new object[] { "你好世界", "你好世界", 0 };
-        yield return new object[] { "你好世界", "你好世間", 1 };
-        yield return new object[] { "", "你好", 2 };
-        yield return new object[] { "祝你好运", "祝你好運", 1 };
-
-        // Astral plane (surrogate pairs). In code-point units.
-        yield return new object[] { "😀", "", 1 };
-        yield return new object[] { "😀", "😀", 0 };
-        yield return new object[] { "😀A", "A", 1 };
-        yield return new object[] { "AB😀CD", "ABCD", 1 };
-        yield return new object[] { "😀😀😀", "😀😀", 1 };
-        yield return new object[] { "🎉🎂🎈", "🎉🎂🎈", 0 };
-        yield return new object[] { "🎉🎂🎈", "🎉🎂🎁", 1 };
-        yield return new object[] { "Hi 👋 World", "Hi 👋 World", 0 };
-        yield return new object[] { "Hi 👋", "Hi 👍", 1 };
-
-        // Mix of BMP and astral: 6 scalars vs 6 scalars, 1 sub.
-        yield return new object[] { "café 😀", "café 😁", 1 };
-        // 7 scalars vs 8 scalars, 1 insert.
-        yield return new object[] { "café 😀", "café 😀!", 1 };
-
-        // Right at the 64-scalar boundary: 64 emoji vs 64 emoji, 1 sub at the end.
-        yield return new object[] { Repeat("😀", 64), Repeat("😀", 63) + "😁", 1 };
-        // 64 BMP vs 64 BMP, identical.
-        yield return new object[] { Repeat("你", 64), Repeat("你", 64), 0 };
-    }
-
-    /// <summary>
-    /// Convenience union: every case the 64-symbol Unicode engine should
-    /// handle (pure ASCII + non-ASCII BMP + surrogate pairs).
-    /// </summary>
-    public static IEnumerable<object[]> AsciiAndUnicode()
-    {
-        foreach (object[] row in Ascii()) yield return row;
-        foreach (object[] row in Unicode()) yield return row;
-    }
-
-    /// <summary>
-    /// Number of Unicode scalar values in <paramref name="s"/> (the length
-    /// unit reported by the Unicode engines).
-    /// </summary>
-    public static int ScalarCount(string s)
-    {
-        int n = 0;
-        foreach (Rune _ in s.EnumerateRunes())
-            n++;
-        return n;
-    }
-
-    private static string Repeat(string s, int times)
-    {
-        var sb = new StringBuilder(s.Length * times);
-        for (int i = 0; i < times; i++)
-            sb.Append(s);
-        return sb.ToString();
     }
 }
