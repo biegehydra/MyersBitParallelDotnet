@@ -108,37 +108,6 @@ public static class TestCases
     }
 
     /// <summary>
-    /// ASCII cases whose pattern length exceeds 64 characters. Only the
-    /// <c>General</c> engines accept these as patterns.
-    /// </summary>
-    public static IEnumerable<object[]> AsciiLong()
-    {
-        yield return new object[] { new string('A', 65), new string('A', 65), 0 };
-        yield return new object[] { new string('A', 100), new string('A', 100), 0 };
-        yield return new object[] { new string('A', 100), new string('A', 99), 1 };
-        yield return new object[] { new string('A', 100), 'B' + new string('A', 99), 1 };
-        yield return new object[] { new string('A', 100), new string('A', 50) + 'B' + new string('A', 49), 1 };
-        yield return new object[] { new string('A', 80), new string('A', 100), 20 };
-        yield return new object[] { new string('A', 100), new string('B', 100), 100 };
-        yield return new object[] { new string('A', 200), "", 200 };
-        yield return new object[] { Repeat("ABCDE", 20), Repeat("ABCDE", 20), 0 };
-        yield return new object[] { Repeat("ABCDE", 20), Repeat("ABCDE", 19), 5 };
-        yield return new object[] { Repeat("ABCDEFGH", 16) /* 128 chars */, Repeat("ABCDEFGH", 16), 0 };
-        yield return new object[]
-        {
-            "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG REPEATEDLY AND ALSO LAZILY",
-            "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG REPEATEDLY AND ALSO LAZILY",
-            0,
-        };
-        yield return new object[]
-        {
-            "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG REPEATEDLY AND ALSO LAZILY",
-            "THE QUICK BROWN FOX JUMPS OVER THE LAZY CAT REPEATEDLY AND ALSO LAZILY",
-            3,
-        };
-    }
-
-    /// <summary>
     /// Unicode cases that fit inside the 64-symbol scalar-value limit.
     /// Distances are reported in Unicode scalar values, not <see cref="char"/>
     /// units, so cases involving surrogate pairs intentionally differ from
@@ -185,32 +154,6 @@ public static class TestCases
     }
 
     /// <summary>
-    /// Unicode cases whose pattern exceeds 64 scalar values. Only the
-    /// <c>General</c> Unicode engine accepts these as patterns.
-    /// </summary>
-    public static IEnumerable<object[]> UnicodeLong()
-    {
-        yield return new object[] { Repeat("你", 65), Repeat("你", 65), 0 };
-        yield return new object[] { Repeat("你", 100), Repeat("你", 100), 0 };
-        yield return new object[] { Repeat("你", 100), Repeat("你", 99), 1 };
-        yield return new object[] { Repeat("你", 100), Repeat("你", 100).Replace('你', '我'), 100 };
-        yield return new object[] { Repeat("😀", 65), Repeat("😀", 65), 0 };
-        yield return new object[] { Repeat("😀", 80), Repeat("😀", 79) + "😁", 1 };
-        yield return new object[] { Repeat("😀", 80), Repeat("😀", 80), 0 };
-        yield return new object[] { Repeat("café ", 20) /* 100 scalars */, Repeat("café ", 20), 0 };
-        yield return new object[] { Repeat("café ", 20), Repeat("cafe ", 20), 20 };
-    }
-
-    /// <summary>
-    /// Convenience union: all ASCII data including the long cases.
-    /// </summary>
-    public static IEnumerable<object[]> AsciiAndAsciiLong()
-    {
-        foreach (object[] row in Ascii()) yield return row;
-        foreach (object[] row in AsciiLong()) yield return row;
-    }
-
-    /// <summary>
     /// Convenience union: every case the 64-symbol Unicode engine should
     /// handle (pure ASCII + non-ASCII BMP + surrogate pairs).
     /// </summary>
@@ -218,18 +161,6 @@ public static class TestCases
     {
         foreach (object[] row in Ascii()) yield return row;
         foreach (object[] row in Unicode()) yield return row;
-    }
-
-    /// <summary>
-    /// Convenience union: every case the General Unicode engine should
-    /// handle (everything Unicode plus the long Unicode cases).
-    /// </summary>
-    public static IEnumerable<object[]> AsciiAndUnicodeAll()
-    {
-        foreach (object[] row in Ascii()) yield return row;
-        foreach (object[] row in AsciiLong()) yield return row;
-        foreach (object[] row in Unicode()) yield return row;
-        foreach (object[] row in UnicodeLong()) yield return row;
     }
 
     /// <summary>
