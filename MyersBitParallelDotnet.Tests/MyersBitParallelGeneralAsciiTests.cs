@@ -135,4 +135,42 @@ public sealed class MyersBitParallelGeneralAsciiTests
         Assert.AreEqual(1000, Engine.Distance(pattern, ""));
         Assert.AreEqual(1000, Engine.Distance("", pattern));
     }
+
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_LengthDifference_Exceeds_Threshold()
+    {
+        // |A*100| - |A*50| = 50, so maxDist=10 must short-circuit upfront.
+        string a = new('A', 100);
+        string b = new('A', 50);
+        Assert.AreEqual(int.MaxValue, Engine.Distance(a, b, maxDist: 10));
+        Assert.AreEqual(int.MaxValue, Engine.Distance(b, a, maxDist: 10));
+        Assert.AreEqual(50, Engine.Distance(a, b, maxDist: 50));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_Distance_Exceeds_Threshold()
+    {
+        // FAST -> CATS is 3 edits, so anything below 3 must be rejected.
+        Assert.AreEqual(int.MaxValue, Engine.Distance("FAST", "CATS", maxDist: 0));
+        Assert.AreEqual(int.MaxValue, Engine.Distance("FAST", "CATS", maxDist: 2));
+        Assert.AreEqual(3, Engine.Distance("FAST", "CATS", maxDist: 3));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_True_Distance_When_Threshold_Is_Loose()
+    {
+        Assert.AreEqual(0, Engine.Distance("HELLO", "HELLO", maxDist: 5));
+        Assert.AreEqual(1, Engine.Distance("KITTEN", "SITTEN", maxDist: 5));
+        Assert.AreEqual(2, Engine.Distance("KITTEN", "KITCHEN", maxDist: 5));
+    }
+
+    [TestMethod]
+    public void MaxDist_Works_With_Prepared_Pattern_Reuse()
+    {
+        using MyersPatternGeneralAscii pat = Engine.Prepare(new string('A', 100));
+        Assert.AreEqual(0, Engine.Distance(in pat, new string('A', 100), maxDist: 1));
+        Assert.AreEqual(1, Engine.Distance(in pat, new string('A', 99), maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance(in pat, new string('B', 100), maxDist: 99));
+        Assert.AreEqual(100, Engine.Distance(in pat, new string('B', 100), maxDist: 100));
+    }
 }

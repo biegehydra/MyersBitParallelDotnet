@@ -52,24 +52,46 @@ public sealed class MyersBitParallelGeneralAscii
     /// <summary>
     /// Compute the Levenshtein distance between <paramref name="a"/> and
     /// <paramref name="b"/>, preparing and disposing a transient pattern
-    /// for <paramref name="a"/>.
+    /// for <paramref name="a"/>. Returns <see cref="int.MaxValue"/> when
+    /// the distance is known to exceed <paramref name="maxDist"/>.
     /// </summary>
-    public int Distance(string a, string b)
+    public int Distance(string a, string b, int maxDist = int.MaxValue)
     {
         using MyersPatternGeneralAscii pat = Prepare(a);
-        return Distance(in pat, b);
+        return Distance(in pat, b, maxDist);
     }
 
     /// <summary>
     /// Compute the Levenshtein distance between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// Returns <see cref="int.MaxValue"/> when the distance is known to
+    /// exceed <paramref name="maxDist"/>.
     /// </summary>
-    public int Distance(in MyersPatternGeneralAscii pattern, string candidate)
+    /// <remarks>
+    /// The DP kernel runs to completion regardless of <paramref name="maxDist"/>;
+    /// the parameter is enforced only via an upfront length-difference
+    /// gate and a final result check, so it cuts work for trivially long
+    /// or short candidates but does not currently band the DP itself.
+    /// </remarks>
+    public int Distance(in MyersPatternGeneralAscii pattern, string candidate, int maxDist = int.MaxValue)
     {
         int m = pattern.Length;
         int n = candidate.Length;
+
+        int lenDiff = m > n ? m - n : n - m;
+        if (lenDiff > maxDist) return int.MaxValue;
+
         if (m == 0) return n;
         if (n == 0) return m;
+
+        int distance = DistanceCore(in pattern, candidate);
+        return distance <= maxDist ? distance : int.MaxValue;
+    }
+
+    private int DistanceCore(in MyersPatternGeneralAscii pattern, string candidate)
+    {
+        int m = pattern.Length;
+        int n = candidate.Length;
 
         byte[] aCodes = pattern.Codes!;
         byte[] bCodes = ArrayPool<byte>.Shared.Rent(n);

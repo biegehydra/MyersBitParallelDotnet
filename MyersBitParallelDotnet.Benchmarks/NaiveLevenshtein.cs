@@ -13,6 +13,22 @@ public static class NaiveLevenshtein
     public static int CaseInsensitive(string a, string b)
         => Calculate(a.ToLowerInvariant(), b.ToLowerInvariant());
 
+    /// <summary>
+    /// Threshold-aware case-sensitive variant. Adds a length-difference
+    /// gate and a final result check; the full matrix is still allocated
+    /// and filled. Returns <see cref="int.MaxValue"/> when the distance
+    /// exceeds <paramref name="maxDist"/>.
+    /// </summary>
+    public static int CaseSensitive(string a, string b, int maxDist)
+        => CalculateBounded(a, b, maxDist);
+
+    /// <summary>
+    /// Threshold-aware case-insensitive variant. See
+    /// <see cref="CaseSensitive(string, string, int)"/>.
+    /// </summary>
+    public static int CaseInsensitive(string a, string b, int maxDist)
+        => CalculateBounded(a.ToLowerInvariant(), b.ToLowerInvariant(), maxDist);
+
     private static int Calculate(string a, string b)
     {
         int m = a.Length;
@@ -20,6 +36,24 @@ public static class NaiveLevenshtein
         if (m == 0) return n;
         if (n == 0) return m;
 
+        return CalculateCore(a, b, m, n);
+    }
+
+    private static int CalculateBounded(string a, string b, int maxDist)
+    {
+        int m = a.Length;
+        int n = b.Length;
+        int lenDiff = m > n ? m - n : n - m;
+        if (lenDiff > maxDist) return int.MaxValue;
+        if (m == 0) return n <= maxDist ? n : int.MaxValue;
+        if (n == 0) return m <= maxDist ? m : int.MaxValue;
+
+        int d = CalculateCore(a, b, m, n);
+        return d <= maxDist ? d : int.MaxValue;
+    }
+
+    private static int CalculateCore(string a, string b, int m, int n)
+    {
         var matrix = new int[m + 1, n + 1];
         for (int i = 0; i <= m; i++) matrix[i, 0] = i;
         for (int j = 0; j <= n; j++) matrix[0, j] = j;

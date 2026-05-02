@@ -170,6 +170,41 @@ public sealed class MyersBitParallel64UnicodeTests
         Assert.AreEqual(2, pat.Length);
     }
 
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_Distance_Exceeds_Threshold()
+    {
+        // "café" -> "" needs 4 edits (4 scalar deletions).
+        Assert.AreEqual(int.MaxValue, Engine.Distance("café", "", maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance("café", "", maxDist: 3));
+        Assert.AreEqual(4, Engine.Distance("café", "", maxDist: 4));
+    }
+
+    [TestMethod]
+    public void MaxDist_Counts_Surrogate_Pair_As_Single_Edit()
+    {
+        // Adding one astral scalar costs 1 edit, not 2 — so maxDist=1 succeeds.
+        Assert.AreEqual(1, Engine.Distance("AB", "A😀B", maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance("AB", "A😀B", maxDist: 0));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_True_Distance_When_Threshold_Is_Loose()
+    {
+        Assert.AreEqual(0, Engine.Distance("你好", "你好", maxDist: 5));
+        Assert.AreEqual(1, Engine.Distance("café", "cafe", maxDist: 5));
+        Assert.AreEqual(2, Engine.Distance("résumé", "resume", maxDist: 5));
+    }
+
+    [TestMethod]
+    public void MaxDist_Works_With_Prepared_Pattern_Reuse()
+    {
+        using MyersPattern64Unicode pat = Engine.Prepare("café");
+        Assert.AreEqual(0, Engine.Distance(in pat, "café", maxDist: 1));
+        Assert.AreEqual(1, Engine.Distance(in pat, "cafe", maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance(in pat, "你好世界", maxDist: 2));
+        Assert.AreEqual(4, Engine.Distance(in pat, "你好世界", maxDist: 4));
+    }
+
     private static string Repeat(string s, int times)
     {
         var sb = new StringBuilder(s.Length * times);

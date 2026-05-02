@@ -98,21 +98,24 @@ public sealed class MyersBitParallel64Unicode
     /// <summary>
     /// Compute the Levenshtein distance between <paramref name="a"/> and
     /// <paramref name="b"/>, preparing and disposing a transient pattern
-    /// for <paramref name="a"/>.
+    /// for <paramref name="a"/>. Returns <see cref="int.MaxValue"/> when
+    /// the distance is known to exceed <paramref name="maxDist"/>.
     /// </summary>
-    public int Distance(string a, string b)
+    public int Distance(string a, string b, int maxDist = int.MaxValue)
     {
         using MyersPattern64Unicode pat = Prepare(a);
-        return DistanceCore(in pat, b, out _);
+        return DistanceCore(in pat, b, maxDist, out _);
     }
 
     /// <summary>
     /// Compute the Levenshtein distance between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// Returns <see cref="int.MaxValue"/> when the distance is known to
+    /// exceed <paramref name="maxDist"/>.
     /// </summary>
-    public int Distance(in MyersPattern64Unicode pattern, string candidate)
+    public int Distance(in MyersPattern64Unicode pattern, string candidate, int maxDist = int.MaxValue)
     {
-        return DistanceCore(in pattern, candidate, out _);
+        return DistanceCore(in pattern, candidate, maxDist, out _);
     }
 
     /// <summary>
@@ -123,7 +126,7 @@ public sealed class MyersBitParallel64Unicode
     public SimilarityRatio SimilarityRatio(string a, string b)
     {
         using MyersPattern64Unicode pat = Prepare(a);
-        int distance = DistanceCore(in pat, b, out int candidateScalarCount);
+        int distance = DistanceCore(in pat, b, int.MaxValue, out int candidateScalarCount);
         return BuildRatio(distance, pat.Length, candidateScalarCount);
     }
 
@@ -133,7 +136,7 @@ public sealed class MyersBitParallel64Unicode
     /// </summary>
     public SimilarityRatio SimilarityRatio(in MyersPattern64Unicode pattern, string candidate)
     {
-        int distance = DistanceCore(in pattern, candidate, out int candidateScalarCount);
+        int distance = DistanceCore(in pattern, candidate, int.MaxValue, out int candidateScalarCount);
         return BuildRatio(distance, pattern.Length, candidateScalarCount);
     }
 
@@ -145,9 +148,34 @@ public sealed class MyersBitParallel64Unicode
         return new SimilarityRatio(distance, ratio);
     }
 
-    private int DistanceCore(in MyersPattern64Unicode p, string candidate, out int candidateScalarCount)
+    private int DistanceCore(in MyersPattern64Unicode p, string candidate, int maxDist, out int candidateScalarCount)
     {
         int m = p.Length;
+        int candidateChars = candidate.Length;
+
+        // Cheap pre-checks driven entirely by char-length bounds. Each
+        // scalar takes 1 or 2 UTF-16 code units, so the candidate carries
+        // at least ceil(candidateChars/2) and at most candidateChars scalars.
+        if (maxDist != int.MaxValue)
+        {
+            int minScalars = (candidateChars + 1) >> 1;
+            int maxScalars = candidateChars;
+
+            // Pattern far longer than the largest possible candidate.
+            if (m - maxScalars > maxDist)
+            {
+                candidateScalarCount = -1;
+                return int.MaxValue;
+            }
+
+            // Pattern far shorter than the smallest possible candidate.
+            if (minScalars - m > maxDist)
+            {
+                candidateScalarCount = -1;
+                return int.MaxValue;
+            }
+        }
+
         ulong maskAll = p.MaskAll;
         ulong lastBitMask = p.LastBitMask;
         Dictionary<int, ulong> masks = p.Masks!;
@@ -158,6 +186,7 @@ public sealed class MyersBitParallel64Unicode
         int n = 0;
 
 #if NET5_0_OR_GREATER
+        int charPos = 0;
         foreach (Rune r in candidate.EnumerateRunes())
         {
             int cp = _runeMapper(r).Value;
@@ -178,10 +207,21 @@ public sealed class MyersBitParallel64Unicode
                 score--;
 
             n++;
+            charPos += r.Utf16SequenceLength;
+
+            // Conservative early-exit: remaining scalars <= remaining chars,
+            // so this is a safe (possibly under-pruning) lower bound on the
+            // best reachable score.
+            int charsRemaining = candidateChars - charPos;
+            if (score - charsRemaining > maxDist)
+            {
+                candidateScalarCount = -1;
+                return int.MaxValue;
+            }
         }
 #else
         int i = 0;
-        while (i < candidate.Length)
+        while (i < candidateChars)
         {
             int cp = ReadCodePoint(candidate, ref i);
             cp = _codePointMapper(cp);
@@ -202,12 +242,19 @@ public sealed class MyersBitParallel64Unicode
                 score--;
 
             n++;
+
+            int charsRemaining = candidateChars - i;
+            if (score - charsRemaining > maxDist)
+            {
+                candidateScalarCount = -1;
+                return int.MaxValue;
+            }
         }
 #endif
 
         candidateScalarCount = n;
-        if (m == 0) return n;
-        return score;
+        if (m == 0) return n <= maxDist ? n : int.MaxValue;
+        return score <= maxDist ? score : int.MaxValue;
     }
 
 #if !NET5_0_OR_GREATER

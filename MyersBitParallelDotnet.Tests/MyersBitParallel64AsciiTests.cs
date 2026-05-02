@@ -154,4 +154,108 @@ public sealed class MyersBitParallel64AsciiTests
 
         Assert.AreEqual(256, invocationCount);
     }
+
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_LengthDifference_Exceeds_Threshold()
+    {
+        // |HELLO| - |HI| = 3, so maxDist=2 must short-circuit.
+        Assert.AreEqual(int.MaxValue, Engine.Distance("HELLO", "HI", maxDist: 2));
+        Assert.AreEqual(int.MaxValue, Engine.Distance("HI", "HELLO", maxDist: 2));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_Distance_Exceeds_Threshold()
+    {
+        // Real distance is 3 (HELLO vs HEY); reject every threshold below.
+        Assert.AreEqual(int.MaxValue, Engine.Distance("HELLO", "HEY", maxDist: 0));
+        Assert.AreEqual(int.MaxValue, Engine.Distance("HELLO", "HEY", maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance("HELLO", "HEY", maxDist: 2));
+        Assert.AreEqual(3, Engine.Distance("HELLO", "HEY", maxDist: 3));
+        Assert.AreEqual(3, Engine.Distance("HELLO", "HEY", maxDist: 100));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_True_Distance_When_Threshold_Is_Loose()
+    {
+        // A loose threshold must never alter the reported distance.
+        Assert.AreEqual(0, Engine.Distance("HELLO", "HELLO", maxDist: 5));
+        Assert.AreEqual(1, Engine.Distance("HELLO", "HALLO", maxDist: 5));
+        Assert.AreEqual(2, Engine.Distance("KITTEN", "KITCHEN", maxDist: 5));
+    }
+
+    [TestMethod]
+    public void MaxDist_Works_With_Prepared_Pattern_Reuse()
+    {
+        using MyersPattern64Ascii pat = Engine.Prepare("APPLE");
+        Assert.AreEqual(0, Engine.Distance(in pat, "APPLE", maxDist: 1));
+        Assert.AreEqual(1, Engine.Distance(in pat, "APPLES", maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance(in pat, "BANANA", maxDist: 1));
+        Assert.AreEqual(5, Engine.Distance(in pat, "BANANA", maxDist: 5));
+    }
+
+    [TestMethod]
+    public void Pattern_CharMask_Reflects_Distinct_Pattern_Symbols()
+    {
+        using MyersPattern64Ascii pat = Engine.Prepare("ABCDE");
+        // 5 distinct ASCII letters → 5 set bits.
+        Assert.AreEqual(5, pat.UniqueCharCount);
+
+        using MyersPattern64Ascii pat2 = Engine.Prepare("AAAAA");
+        // 1 distinct symbol regardless of repetition.
+        Assert.AreEqual(1, pat2.UniqueCharCount);
+
+        using MyersPattern64Ascii empty = Engine.Prepare("");
+        Assert.AreEqual(0UL, empty.CharMask);
+        Assert.AreEqual(0, empty.UniqueCharCount);
+    }
+
+    [TestMethod]
+    public void BuildCharMask_Matches_Prepared_Pattern_CharMask()
+    {
+        // The two paths (Prepare vs BuildCharMask) walk the same mapper
+        // table and the same collapse rule, so for any string they must
+        // produce identical masks.
+        string sample = "HELLO WORLD";
+        using MyersPattern64Ascii pat = Engine.Prepare(sample);
+        Assert.AreEqual(pat.CharMask, Engine.BuildCharMask(sample));
+    }
+
+    [TestMethod]
+    public void BuildCharMask_Empty_String_Returns_Zero()
+    {
+        Assert.AreEqual(0UL, Engine.BuildCharMask(""));
+    }
+
+    [TestMethod]
+    public void RequiredCharMask_Rejects_Candidate_Missing_Required_Symbol()
+    {
+        // Require every symbol of the query "QUEEN" to appear in candidate.
+        ulong required = Engine.BuildCharMask("QUEEN");
+        using MyersPattern64Ascii pat = Engine.Prepare("QUEEN");
+
+        // Candidate missing 'Q' must short-circuit.
+        Assert.AreEqual(int.MaxValue, Engine.Distance(in pat, "UEENS", maxDist: 5, requiredCharMask: required));
+        // Candidate containing every required symbol passes the filter.
+        Assert.AreEqual(0, Engine.Distance(in pat, "QUEEN", maxDist: 5, requiredCharMask: required));
+        Assert.AreEqual(1, Engine.Distance(in pat, "QUEENS", maxDist: 5, requiredCharMask: required));
+    }
+
+    [TestMethod]
+    public void RequiredCharMask_Default_Zero_Is_A_Noop()
+    {
+        // requiredCharMask = 0 means "no required symbols", so behavior must
+        // be identical to the no-arg overload.
+        using MyersPattern64Ascii pat = Engine.Prepare("HELLO");
+        Assert.AreEqual(Engine.Distance(in pat, "HEY"),
+                        Engine.Distance(in pat, "HEY", maxDist: int.MaxValue, requiredCharMask: 0UL));
+    }
+
+    [TestMethod]
+    public void RequiredCharMask_Combined_With_MaxDist_Still_Reports_True_Distance_When_Both_Pass()
+    {
+        ulong required = Engine.BuildCharMask("HELLO");
+        using MyersPattern64Ascii pat = Engine.Prepare("HELLO");
+        // "HELLLO" has every required symbol and is within distance 1.
+        Assert.AreEqual(1, Engine.Distance(in pat, "HELLLO", maxDist: 2, requiredCharMask: required));
+    }
 }

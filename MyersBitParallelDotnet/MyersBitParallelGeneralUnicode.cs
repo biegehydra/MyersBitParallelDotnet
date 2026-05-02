@@ -59,27 +59,47 @@ public sealed class MyersBitParallelGeneralUnicode
     /// <summary>
     /// Compute the Levenshtein distance between <paramref name="a"/> and
     /// <paramref name="b"/>, preparing and disposing a transient pattern
-    /// for <paramref name="a"/>.
+    /// for <paramref name="a"/>. Returns <see cref="int.MaxValue"/> when
+    /// the distance is known to exceed <paramref name="maxDist"/>.
     /// </summary>
-    public int Distance(string a, string b)
+    public int Distance(string a, string b, int maxDist = int.MaxValue)
     {
         using MyersPatternGeneralUnicode pat = Prepare(a);
-        return Distance(in pat, b);
+        return Distance(in pat, b, maxDist);
     }
 
     /// <summary>
     /// Compute the Levenshtein distance between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
+    /// Returns <see cref="int.MaxValue"/> when the distance is known to
+    /// exceed <paramref name="maxDist"/>.
     /// </summary>
-    public int Distance(in MyersPatternGeneralUnicode pattern, string candidate)
+    /// <remarks>
+    /// The DP kernel runs to completion regardless of <paramref name="maxDist"/>;
+    /// the parameter is enforced via an upfront scalar-length-difference
+    /// gate (after decoding the candidate) and a final result check, so it
+    /// cuts work for trivially mismatched lengths but does not currently
+    /// band the DP itself.
+    /// </remarks>
+    public int Distance(in MyersPatternGeneralUnicode pattern, string candidate, int maxDist = int.MaxValue)
     {
+        int m = pattern.Length;
+
         if (candidate.Length == 0)
-            return pattern.Length;
+        {
+            return m <= maxDist ? m : int.MaxValue;
+        }
 
         int[] bCodes = ToMappedCodePoints(candidate, out int n);
         try
         {
-            return DistanceCore(in pattern, bCodes, n);
+            int lenDiff = m > n ? m - n : n - m;
+            if (lenDiff > maxDist) return int.MaxValue;
+
+            if (m == 0) return n;
+
+            int distance = DistanceCore(in pattern, bCodes, n);
+            return distance <= maxDist ? distance : int.MaxValue;
         }
         finally
         {

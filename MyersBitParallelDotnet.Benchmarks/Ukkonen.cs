@@ -14,6 +14,22 @@ public static class Ukkonen
     public static int CaseInsensitive(string a, string b)
         => Calculate(a.ToLowerInvariant(), b.ToLowerInvariant());
 
+    /// <summary>
+    /// Threshold-aware case-sensitive variant. Bounds the band at
+    /// <paramref name="maxDist"/> instead of doubling, so the algorithm
+    /// runs in O(n * maxDist) and returns <see cref="int.MaxValue"/> when
+    /// the true distance exceeds <paramref name="maxDist"/>.
+    /// </summary>
+    public static int CaseSensitive(string a, string b, int maxDist)
+        => CalculateBounded(a, b, maxDist);
+
+    /// <summary>
+    /// Threshold-aware case-insensitive variant. See
+    /// <see cref="CaseSensitive(string, string, int)"/>.
+    /// </summary>
+    public static int CaseInsensitive(string a, string b, int maxDist)
+        => CalculateBounded(a.ToLowerInvariant(), b.ToLowerInvariant(), maxDist);
+
     private static int Calculate(string a, string b)
     {
         // Force m <= n so the band offset is non-negative.
@@ -32,6 +48,23 @@ public static class Ukkonen
             if (d <= k) return d;
             k *= 2;
         }
+    }
+
+    private static int CalculateBounded(string a, string b, int maxDist)
+    {
+        if (a.Length > b.Length) (a, b) = (b, a);
+
+        int m = a.Length;
+        int n = b.Length;
+
+        // Length difference is a hard lower bound; if it already exceeds
+        // the threshold no banding is required.
+        if (n - m > maxDist) return int.MaxValue;
+
+        if (m == 0) return n <= maxDist ? n : int.MaxValue;
+
+        int d = ComputeBanded(a, b, maxDist);
+        return d <= maxDist ? d : int.MaxValue;
     }
 
     private static int ComputeBanded(string a, string b, int k)

@@ -128,6 +128,43 @@ public sealed class MyersBitParallelGeneralUnicodeTests
         Assert.AreEqual(4, Engine.Distance(in pat, ""));
     }
 
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_LengthDifference_Exceeds_Threshold()
+    {
+        // 100 vs 50 BMP scalars: lenDiff = 50, so maxDist=10 must reject.
+        string a = Repeat("你", 100);
+        string b = Repeat("你", 50);
+        Assert.AreEqual(int.MaxValue, Engine.Distance(a, b, maxDist: 10));
+        Assert.AreEqual(int.MaxValue, Engine.Distance(b, a, maxDist: 10));
+        Assert.AreEqual(50, Engine.Distance(a, b, maxDist: 50));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_MaxValue_When_Distance_Exceeds_Threshold()
+    {
+        // résumé -> resume is 2 edits in scalar terms.
+        Assert.AreEqual(int.MaxValue, Engine.Distance("résumé", "resume", maxDist: 1));
+        Assert.AreEqual(2, Engine.Distance("résumé", "resume", maxDist: 2));
+    }
+
+    [TestMethod]
+    public void MaxDist_Returns_True_Distance_When_Threshold_Is_Loose()
+    {
+        Assert.AreEqual(0, Engine.Distance("你好世界", "你好世界", maxDist: 5));
+        Assert.AreEqual(1, Engine.Distance("café", "cafe", maxDist: 5));
+        Assert.AreEqual(1, Engine.Distance("AB", "A😀B", maxDist: 5));
+    }
+
+    [TestMethod]
+    public void MaxDist_Works_With_Prepared_Pattern_Reuse()
+    {
+        using MyersPatternGeneralUnicode pat = Engine.Prepare(Repeat("😀", 100));
+        Assert.AreEqual(0, Engine.Distance(in pat, Repeat("😀", 100), maxDist: 1));
+        Assert.AreEqual(1, Engine.Distance(in pat, Repeat("😀", 99), maxDist: 1));
+        Assert.AreEqual(int.MaxValue, Engine.Distance(in pat, Repeat("😁", 100), maxDist: 99));
+        Assert.AreEqual(100, Engine.Distance(in pat, Repeat("😁", 100), maxDist: 100));
+    }
+
     private static string Repeat(string s, int times)
     {
         var sb = new StringBuilder(s.Length * times);
