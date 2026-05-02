@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="MyersBitParallelDotnet.Benchmarks/MyersBitParallelDotnet.Benchmarks.csproj" />
+  <Project Path="MyersBitParallelDotnet.Tests/MyersBitParallelDotnet.Tests.csproj" />
+  <Project Path="MyersBitParallelDotnet/MyersBitParallelDotnet.csproj" />
+</Solution>
