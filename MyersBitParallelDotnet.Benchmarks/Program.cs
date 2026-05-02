@@ -14,4 +14,4 @@ using MyersBitParallelDotnet.Benchmarks;
 var config = DefaultConfig.Instance
     .AddJob(Job.ShortRun);
 
-BenchmarkRunner.Run<OneToManyMaxDist64AsciiBenchmark>(config);
+BenchmarkRunner.Run<OneToOne64AsciiBenchmark>(config);

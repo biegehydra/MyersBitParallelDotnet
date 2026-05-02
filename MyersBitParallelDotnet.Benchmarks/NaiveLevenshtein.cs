@@ -8,24 +8,9 @@ namespace MyersBitParallelDotnet.Benchmarks;
 /// </summary>
 public static class NaiveLevenshtein
 {
-    public static int CaseSensitive(string a, string b) => Calculate(a, b);
-
     public static int CaseInsensitive(string a, string b)
         => Calculate(a.ToLowerInvariant(), b.ToLowerInvariant());
 
-    /// <summary>
-    /// Threshold-aware case-sensitive variant. Adds a length-difference
-    /// gate and a final result check; the full matrix is still allocated
-    /// and filled. Returns <see cref="int.MaxValue"/> when the distance
-    /// exceeds <paramref name="maxDist"/>.
-    /// </summary>
-    public static int CaseSensitive(string a, string b, int maxDist)
-        => CalculateBounded(a, b, maxDist);
-
-    /// <summary>
-    /// Threshold-aware case-insensitive variant. See
-    /// <see cref="CaseSensitive(string, string, int)"/>.
-    /// </summary>
     public static int CaseInsensitive(string a, string b, int maxDist)
         => CalculateBounded(a.ToLowerInvariant(), b.ToLowerInvariant(), maxDist);
 
