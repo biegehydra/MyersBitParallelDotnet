@@ -55,16 +55,6 @@ public class OneToManyMaxDist64Benchmark
     }
 
     [Benchmark(Baseline = true)]
-    public long Myers_PreparedOnce_NoMaxDist()
-    {
-        long sum = 0;
-        using MyersPattern64 pat = Engine.Prepare(_query);
-        for (int i = 0; i < _candidates.Length; i++)
-            sum += Engine.Distance(in pat, _candidates[i]);
-        return sum;
-    }
-
-    [Benchmark]
     public long Myers_PreparedOnce_WithMaxDist()
     {
         long sum = 0;
@@ -78,6 +68,16 @@ public class OneToManyMaxDist64Benchmark
             // accumulator.
             if (d != int.MaxValue) sum += d;
         }
+        return sum;
+    }
+
+    [Benchmark]
+    public long Myers_PreparedOnce_NoMaxDist()
+    {
+        long sum = 0;
+        using MyersPattern64 pat = Engine.Prepare(_query);
+        for (int i = 0; i < _candidates.Length; i++)
+            sum += Engine.Distance(in pat, _candidates[i]);
         return sum;
     }
 
