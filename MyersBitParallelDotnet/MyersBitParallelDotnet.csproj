@@ -22,21 +22,21 @@
 
     <Authors>Connor Hallman</Authors>
     <Product>MyersBitParallel</Product>
+    <Copyright>Copyright © 2026 Connor Hallman</Copyright>
 
     <Title>Myers Bit-Parallel Levenshtein Distance</Title>
     <Description>High-throughput Myers bit-parallel Levenshtein distance for ASCII patterns up to 64 characters. Supports pattern reuse, configurable character mapping, and threshold-based fuzzy search via maxDist + requiredCharMask pruning. Multi-targets netstandard2.1 and net10.0.</Description>
 
     <PackageTags>levenshtein;edit-distance;myers;bit-parallel;fuzzy-search;string-distance;ascii;performance</PackageTags>
 
+    <!-- SPDX id so nuget.org accepts the package (matches README license section). -->
+    <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
+
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
-    <!--
-      Set these once you publish a public source repo so consumers and
-      nuget.org get a clickable link to the source:
-      <RepositoryType>git</RepositoryType>
-      <RepositoryUrl>https://github.com/your-org/MyersBitParallel</RepositoryUrl>
-      <PackageProjectUrl>https://github.com/your-org/MyersBitParallel</PackageProjectUrl>
-    -->
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/biegehydra/MyersBitParallelDotnet</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/biegehydra/MyersBitParallelDotnet</PackageProjectUrl>
 
     <!-- Symbol package (sources + PDBs) for debugger step-through. -->
     <IncludeSymbols>true</IncludeSymbols>
