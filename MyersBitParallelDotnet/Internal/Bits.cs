@@ -15,9 +15,8 @@ internal static class Bits
 {
     /// <summary>
     /// Number of set bits in <paramref name="value"/>. Uses
-    /// <see cref="System.Numerics.BitOperations.PopCount(ulong)"/> on
-    /// runtimes that expose it; otherwise computes via the standard SWAR
-    /// reduction.
+    /// <c>System.Numerics.BitOperations.PopCount(ulong)</c> on runtimes
+    /// that expose it; otherwise computes via the standard SWAR reduction.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int PopCount(ulong value)

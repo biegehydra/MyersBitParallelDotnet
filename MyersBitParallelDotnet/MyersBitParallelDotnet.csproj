@@ -6,7 +6,46 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>MyersBitParallel</RootNamespace>
+    <AssemblyName>MyersBitParallel</AssemblyName>
+
+    <!-- Generate IntelliSense XML alongside the .dll. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- 1591: missing XML doc comment for publicly visible type or member. -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
+
+  <PropertyGroup Label="NuGet package metadata">
+    <IsPackable>true</IsPackable>
+
+    <PackageId>MyersBitParallel</PackageId>
+    <Version>0.1.0</Version>
+
+    <Authors>Connor Hallman</Authors>
+    <Product>MyersBitParallel</Product>
+
+    <Title>Myers Bit-Parallel Levenshtein Distance</Title>
+    <Description>High-throughput Myers bit-parallel Levenshtein distance for ASCII patterns up to 64 characters. Supports pattern reuse, configurable character mapping, and threshold-based fuzzy search via maxDist + requiredCharMask pruning. Multi-targets netstandard2.1 and net10.0.</Description>
+
+    <PackageTags>levenshtein;edit-distance;myers;bit-parallel;fuzzy-search;string-distance;ascii;performance</PackageTags>
+
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!--
+      Set these once you publish a public source repo so consumers and
+      nuget.org get a clickable link to the source:
+      <RepositoryType>git</RepositoryType>
+      <RepositoryUrl>https://github.com/your-org/MyersBitParallel</RepositoryUrl>
+      <PackageProjectUrl>https://github.com/your-org/MyersBitParallel</PackageProjectUrl>
+    -->
+
+    <!-- Symbol package (sources + PDBs) for debugger step-through. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
     <!-- System.Runtime.CompilerServices.Unsafe is in-box on net5.0+. -->
