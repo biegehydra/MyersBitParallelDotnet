@@ -12,6 +12,8 @@ small allowed edit distance) it runs **5×–20× faster** than a textbook
 Wagner-Fischer DP, and **20×–200× faster** with the optional `maxDist` and
 `requiredCharMask` prefilters engaged.
 
+**Further reading:** [Optimizing Levenshtein for Fuzzy Name Matching](https://connorhallman.com/blog/optimizing-levenshtein) — design notes, animations, and pruning layers.
+
 ---
 
 ## Features
@@ -201,6 +203,23 @@ ulong BuildCharMask(string s);
 
 `Distance` returns `int.MaxValue` when the result is known to exceed
 `maxDist`; otherwise the true edit distance.
+
+---
+
+## Benchmarks
+
+[BenchmarkDotNet](https://benchmarkdotnet.org/) (`OneToManyMaxDist64Benchmark`): one prepared query, 1000 noisy ASCII candidates, case-insensitive distance, `MyersBitParallel64.AsciiCaseInsensitive`. **Ratio** is each method’s mean time divided by the fastest row (lower is better).
+
+| Method | MaxDist | CandidateCount | Mean | Ratio |
+|--------|--------:|---------------:|-----:|------:|
+| `Myers_PreparedOnce_WithMaxDist` | 3 | 1000 | 5.415 μs | 1.00 |
+| `Myers_PreparedOnce_NoMaxDist` | 3 | 1000 | 21.652 μs | 4.00 |
+| `NaiveLevenshteinReference_NoMaxDist` | 3 | 1000 | 202.914 μs | 37.48 |
+| `NaiveLevenshteinReference_WithMaxDist` | 3 | 1000 | 63.057 μs | 11.65 |
+| `WagnerFischerReference_WithMaxDist` | 3 | 1000 | 42.496 μs | 7.85 |
+| `UkkonenReference_WithMaxDist` | 3 | 1000 | 51.068 μs | 9.43 |
+
+Machine, runtime, and job settings affect absolute numbers; see the [blog post](https://connorhallman.com/blog/optimizing-levenshtein) for full tables and methodology.
 
 ---
 
