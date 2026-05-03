@@ -219,4 +219,4 @@ ulong BuildCharMask(string s);
 
 ## License
 
-Not specified yet. Contact the author before redistribution.
+GNU Affero General Public License v3.0
