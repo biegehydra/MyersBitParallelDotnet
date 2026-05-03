@@ -36,6 +36,12 @@ public static class BenchmarkData
     ];
 
     /// <summary>
+    /// Distinct queries used by one-to-many benchmarks (Fisher–Yates shuffle
+    /// of <see cref="AsciiCities"/> indices with seed 9001).
+    /// </summary>
+    public const int OneToManyQueryCount = 8;
+
+    /// <summary>
     /// Build <paramref name="targetCount"/> noisy candidates by repeatedly
     /// permuting strings drawn round-robin from <paramref name="originals"/>.
     /// Deterministic for a given <paramref name="seed"/>.
@@ -55,21 +61,87 @@ public static class BenchmarkData
     }
 
     /// <summary>
-    /// Build <paramref name="pairCount"/> independent (query, candidate)
-    /// pairs by selecting strings round-robin from <paramref name="originals"/>
-    /// and applying a single random edit to each candidate.
+    /// Pick <paramref name="count"/> distinct strings from <paramref name="originals"/>
+    /// using Fisher–Yates on indices with <paramref name="seed"/> (reproducible).
+    /// If <paramref name="count"/> exceeds <paramref name="originals"/>.Length, returns all entries in shuffled order.
+    /// </summary>
+    public static string[] PickDistinctQueries(string[] originals, int count, int seed = 9001)
+    {
+        if (originals.Length == 0 || count <= 0)
+            return Array.Empty<string>();
+
+        int take = count < originals.Length ? count : originals.Length;
+        var indices = new int[originals.Length];
+        for (int i = 0; i < indices.Length; i++)
+            indices[i] = i;
+
+        var rnd = new Random(seed);
+        for (int i = indices.Length - 1; i > 0; i--)
+        {
+            int j = rnd.Next(i + 1);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
+        }
+
+        var result = new string[take];
+        for (int i = 0; i < take; i++)
+            result[i] = originals[indices[i]];
+        return result;
+    }
+
+    /// <summary>
+    /// One noisy candidate list per query slot (independent RNG streams via <paramref name="baseSeed"/> + offset).
+    /// </summary>
+    public static string[][] BuildNoisyCandidatesPerQuery(
+        string[] originals,
+        int queryCount,
+        int candidateCount,
+        int baseSeed = 42)
+    {
+        var rows = new string[queryCount][];
+        for (int q = 0; q < queryCount; q++)
+            rows[q] = BuildNoisyCandidates(originals, candidateCount, baseSeed + q * 97_169);
+        return rows;
+    }
+
+    /// <summary>
+    /// Build <paramref name="pairCount"/> independent (query, candidate) pairs.
+    /// A fraction of pairs (<paramref name="nearMatchFraction"/>, default 0.5)
+    /// are near-matches: the candidate is a single-edit perturbation of the
+    /// query. The rest are unrelated: the candidate is a single-edit
+    /// perturbation of a *different* string from <paramref name="originals"/>,
+    /// so prefix/suffix-trimming engines (e.g. Quickenshtein) cannot
+    /// short-circuit them.
     /// </summary>
     public static (string Query, string Candidate)[] BuildOneToOnePairs(
         string[] originals,
         int pairCount,
-        int seed = 1337)
+        int seed = 1337,
+        double nearMatchFraction = 0.5)
     {
+        if (originals.Length == 0 || pairCount <= 0)
+            return Array.Empty<(string, string)>();
+
+        if (nearMatchFraction < 0) nearMatchFraction = 0;
+        else if (nearMatchFraction > 1) nearMatchFraction = 1;
+
         var rnd = new Random(seed);
         var pairs = new (string, string)[pairCount];
         for (int i = 0; i < pairCount; i++)
         {
             string query = originals[i % originals.Length];
-            string candidate = Permute(query, rnd);
+            string source;
+            if (originals.Length == 1 || rnd.NextDouble() < nearMatchFraction)
+            {
+                source = query;
+            }
+            else
+            {
+                int otherIdx = rnd.Next(originals.Length - 1);
+                if (otherIdx >= i % originals.Length) otherIdx++;
+                source = originals[otherIdx];
+            }
+
+            string candidate = Permute(source, rnd);
             pairs[i] = (query, candidate);
         }
         return pairs;
