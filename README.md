@@ -194,8 +194,8 @@ int Distance(string a, string b, int maxDist = int.MaxValue, ulong requiredCharM
 int Distance(in MyersPattern64 pattern, string candidate,
              int maxDist = int.MaxValue, ulong requiredCharMask = 0);
 
-SimilarityRatio SimilarityRatio(string a, string b);
-SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate);
+SimilarityRatio SimilarityRatio(string a, string b, int maxDist = int.MaxValue, ulong requiredCharMask = 0);
+SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate, int maxDist = int.MaxValue, ulong requiredCharMask = 0);
 
 MyersPattern64 Prepare(string pattern);
 ulong BuildCharMask(string s);

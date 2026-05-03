@@ -46,6 +46,18 @@ public sealed class MyersBitParallel64
 
 
     /// <summary>
+    /// Construct an engine with a prebuilt 256-entry lookup table
+    /// </summary>
+    public MyersBitParallel64(byte[] map)
+    {
+        if (map.Length != 256)
+        {
+            throw new ArgumentException("Map must contain 256 entries", nameof(map));
+        }
+        _map = map;
+    }
+
+    /// <summary>
     /// Construct an engine that builds its 256-entry lookup table by
     /// invoking <paramref name="charMapper"/> once per byte value.
     /// </summary>
@@ -180,10 +192,25 @@ public sealed class MyersBitParallel64
     /// and <paramref name="b"/>, preparing and disposing a transient
     /// pattern for <paramref name="a"/>.
     /// </summary>
-    public SimilarityRatio SimilarityRatio(string a, string b)
+    /// <remarks>
+    /// <para>
+    /// For a finite Levenshtein distance <c>d</c>, the returned
+    /// <see cref="SimilarityRatio.Ratio"/> is <c>1 - d / max(|a|, |b|)</c>, or <c>1</c> when both
+    /// strings are empty.
+    /// </para>
+    /// <para>
+    /// When <see cref="Distance(string, string, int, ulong)"/> would return
+    /// <see cref="int.MaxValue"/> (over <paramref name="maxDist"/>, failed
+    /// <paramref name="requiredCharMask"/> / alphabet overlap pruning, etc.), the returned
+    /// <see cref="SimilarityRatio.Distance"/> is <see cref="int.MaxValue"/> and
+    /// <see cref="SimilarityRatio.Ratio"/> is <c>0</c>. That ratio is a convention for “no
+    /// comparable similarity” in <c>[0, 1]</c>, not <c>1 - int.MaxValue / maxLen</c>.
+    /// </para>
+    /// </remarks>
+    public SimilarityRatio SimilarityRatio(string a, string b, int maxDist = int.MaxValue, ulong requiredCharMask = 0UL)
     {
         using MyersPattern64 pat = Prepare(a);
-        int distance = Distance(in pat, b);
+        int distance = Distance(in pat, b, maxDist, requiredCharMask);
         return BuildRatio(distance, a.Length, b.Length);
     }
 
@@ -191,15 +218,34 @@ public sealed class MyersBitParallel64
     /// Compute distance and similarity ratio between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
     /// </summary>
-    public SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate)
+    /// <remarks>
+    /// <para>
+    /// For a finite Levenshtein distance <c>d</c>, the returned
+    /// <see cref="SimilarityRatio.Ratio"/> is <c>1 - d / max(|pattern|, |candidate|)</c>, or <c>1</c>
+    /// when both lengths are zero.
+    /// </para>
+    /// <para>
+    /// When <see cref="Distance(in MyersPattern64, string, int, ulong)"/> would return
+    /// <see cref="int.MaxValue"/> (over <paramref name="maxDist"/>, failed
+    /// <paramref name="requiredCharMask"/> / alphabet overlap pruning, etc.), the returned
+    /// <see cref="SimilarityRatio.Distance"/> is <see cref="int.MaxValue"/> and
+    /// <see cref="SimilarityRatio.Ratio"/> is <c>0</c>. That ratio is a convention for “no
+    /// comparable similarity” in <c>[0, 1]</c>, not <c>1 - int.MaxValue / maxLen</c>.
+    /// </para>
+    /// </remarks>
+    public SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate, int maxDist = int.MaxValue, ulong requiredCharMask = 0UL)
     {
-        int distance = Distance(in pattern, candidate);
+        int distance = Distance(in pattern, candidate, maxDist, requiredCharMask);
         return BuildRatio(distance, pattern.Length, candidate.Length);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static SimilarityRatio BuildRatio(int distance, int aLen, int bLen)
     {
+        if (distance == int.MaxValue)
+        {
+            return new SimilarityRatio(int.MaxValue, 0);
+        }
         int maxLen = aLen >= bLen ? aLen : bLen;
         double ratio = maxLen == 0 ? 1.0 : 1.0 - ((double)distance / maxLen);
         return new SimilarityRatio(distance, ratio);
