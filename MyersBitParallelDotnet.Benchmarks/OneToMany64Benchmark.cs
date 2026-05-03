@@ -9,14 +9,14 @@ namespace MyersBitParallelDotnet.Benchmarks;
 /// this is the access pattern that the bit-parallel kernel is designed for.
 /// </summary>
 [MemoryDiagnoser]
-public class OneToMany64AsciiBenchmark
+public class OneToMany64Benchmark
 {
     [Params(10, 100, 1000)]
     public int CandidateCount;
 
     private string _query = null!;
     private string[] _candidates = null!;
-    private static readonly MyersBitParallel64Ascii Engine = MyersBitParallel64Ascii.CaseInsensitive;
+    private static readonly MyersBitParallel64 Engine = MyersBitParallel64.AsciiCaseInsensitive;
 
     [GlobalSetup]
     public void Setup()
@@ -29,7 +29,7 @@ public class OneToMany64AsciiBenchmark
     public int MyersBitParallel_PreparedOnce()
     {
         int sum = 0;
-        using MyersPattern64Ascii pat = Engine.Prepare(_query);
+        using MyersPattern64 pat = Engine.Prepare(_query);
         for (int i = 0; i < _candidates.Length; i++)
             sum += Engine.Distance(in pat, _candidates[i]);
         return sum;

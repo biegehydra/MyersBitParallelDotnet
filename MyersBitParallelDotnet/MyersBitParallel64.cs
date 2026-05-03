@@ -7,15 +7,33 @@ using MyersBitParallel.Internal;
 namespace MyersBitParallel;
 
 /// <summary>
-/// Single-word Myers bit-parallel Levenshtein engine optimized for ASCII
-/// patterns up to <see cref="MaxPatternLength"/> characters. The hot loop
-/// reads from a constructor-built <c>byte[256]</c> mapping table and
-/// never invokes a user-provided delegate.
+/// Single-word Myers bit-parallel Levenshtein engine for patterns up to
+/// <see cref="MaxPatternLength"/> symbols. Operates on byte values
+/// produced by a user-supplied <see cref="char"/>-to-<see cref="byte"/>
+/// mapper that is invoked exactly 256 times at construction to populate
+/// a lookup table; the hot loop never invokes the delegate again.
 /// </summary>
-public sealed class MyersBitParallel64Ascii
+/// <remarks>
+/// The engine itself is alphabet-agnostic: any mapping that fits each
+/// <see cref="char"/> into a single <see cref="byte"/> bucket is valid.
+/// The <see cref="AsciiCaseSensitive"/> and <see cref="AsciiCaseInsensitive"/>
+/// statics are convenience instances wired with <see cref="AsciiMappers"/>;
+/// for non-ASCII workloads, supply your own mapper via the constructor.
+/// </remarks>
+public sealed class MyersBitParallel64
 {
-    public static readonly MyersBitParallel64Ascii CaseSensitive = new MyersBitParallel64Ascii(AsciiMappers.CaseSensitive);
-    public static readonly MyersBitParallel64Ascii CaseInsensitive = new MyersBitParallel64Ascii(AsciiMappers.CaseInsensitive);
+    /// <summary>
+    /// Pre-built engine using <see cref="AsciiMappers.CaseSensitive"/>:
+    /// every byte value preserved verbatim, so case differences count.
+    /// </summary>
+    public static readonly MyersBitParallel64 AsciiCaseSensitive = new MyersBitParallel64(AsciiMappers.CaseSensitive);
+
+    /// <summary>
+    /// Pre-built engine using <see cref="AsciiMappers.CaseInsensitive"/>:
+    /// ASCII <c>A</c>–<c>Z</c> folded to <c>a</c>–<c>z</c>; everything else
+    /// preserved verbatim.
+    /// </summary>
+    public static readonly MyersBitParallel64 AsciiCaseInsensitive = new MyersBitParallel64(AsciiMappers.CaseInsensitive);
 
 
     /// <summary>
@@ -31,7 +49,7 @@ public sealed class MyersBitParallel64Ascii
     /// Construct an engine that builds its 256-entry lookup table by
     /// invoking <paramref name="charMapper"/> once per byte value.
     /// </summary>
-    public MyersBitParallel64Ascii(Func<char, byte> charMapper)
+    public MyersBitParallel64(Func<char, byte> charMapper)
     {
         if (charMapper == null) throw new ArgumentNullException(nameof(charMapper));
         _map = new byte[256];
@@ -42,23 +60,23 @@ public sealed class MyersBitParallel64Ascii
     }
 
     /// <summary>
-    /// Build a reusable <see cref="MyersPattern64Ascii"/> handle for
+    /// Build a reusable <see cref="MyersPattern64"/> handle for
     /// <paramref name="pattern"/>. The caller owns the returned struct and
-    /// must <see cref="MyersPattern64Ascii.Dispose"/> it when finished.
+    /// must <see cref="MyersPattern64.Dispose"/> it when finished.
     /// </summary>
-    public MyersPattern64Ascii Prepare(string pattern)
+    public MyersPattern64 Prepare(string pattern)
     {
         int m = pattern.Length;
         if (m > MaxPatternLength)
         {
             throw new ArgumentException(
-                $"Pattern length {m} exceeds the {MaxPatternLength}-symbol limit of {nameof(MyersBitParallel64Ascii)}.",
+                $"Pattern length {m} exceeds the {MaxPatternLength}-symbol limit of {nameof(MyersBitParallel64)}.",
                 nameof(pattern));
         }
 
         if (m == 0)
         {
-            return new MyersPattern64Ascii(null, 0, 0UL, 0UL, 0UL, 0);
+            return new MyersPattern64(null, 0, 0UL, 0UL, 0UL, 0);
         }
 
         // 256 slots so any byte value the user-supplied mapper might emit
@@ -82,13 +100,13 @@ public sealed class MyersBitParallel64Ascii
         ulong maskAll = m == 64 ? ulong.MaxValue : (1UL << m) - 1UL;
         ulong lastBitMask = 1UL << (m - 1);
 
-        return new MyersPattern64Ascii(masks, m, lastBitMask, maskAll, charMask, Bits.PopCount(charMask));
+        return new MyersPattern64(masks, m, lastBitMask, maskAll, charMask, Bits.PopCount(charMask));
     }
 
     /// <summary>
     /// Build the 64-bit character occurrence mask for <paramref name="s"/>
     /// using this engine's mapper. Suitable for passing to
-    /// <see cref="Distance(in MyersPattern64Ascii, string, int, ulong)"/>
+    /// <see cref="Distance(in MyersPattern64, string, int, ulong)"/>
     /// as the <c>requiredCharMask</c> argument when filtering candidates
     /// that must contain every symbol in a reference string.
     /// </summary>
@@ -112,7 +130,7 @@ public sealed class MyersBitParallel64Ascii
     /// </summary>
     public int Distance(string a, string b, int maxDist = int.MaxValue, ulong requiredCharMask = 0UL)
     {
-        using MyersPattern64Ascii pat = Prepare(a);
+        using MyersPattern64 pat = Prepare(a);
         return Distance(in pat, b, maxDist, requiredCharMask);
     }
 
@@ -124,7 +142,7 @@ public sealed class MyersBitParallel64Ascii
     /// the <paramref name="requiredCharMask"/> filter.
     /// </summary>
     public int Distance(
-        in MyersPattern64Ascii pattern,
+        in MyersPattern64 pattern,
         string candidate,
         int maxDist = int.MaxValue,
         ulong requiredCharMask = 0UL)
@@ -164,7 +182,7 @@ public sealed class MyersBitParallel64Ascii
     /// </summary>
     public SimilarityRatio SimilarityRatio(string a, string b)
     {
-        using MyersPattern64Ascii pat = Prepare(a);
+        using MyersPattern64 pat = Prepare(a);
         int distance = Distance(in pat, b);
         return BuildRatio(distance, a.Length, b.Length);
     }
@@ -173,7 +191,7 @@ public sealed class MyersBitParallel64Ascii
     /// Compute distance and similarity ratio between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
     /// </summary>
-    public SimilarityRatio SimilarityRatio(in MyersPattern64Ascii pattern, string candidate)
+    public SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate)
     {
         int distance = Distance(in pattern, candidate);
         return BuildRatio(distance, pattern.Length, candidate.Length);
@@ -206,7 +224,7 @@ public sealed class MyersBitParallel64Ascii
         return mask;
     }
 
-    private int BoundedKernel(in MyersPattern64Ascii pattern, string candidate, int maxDist)
+    private int BoundedKernel(in MyersPattern64 pattern, string candidate, int maxDist)
     {
         int m = pattern.Length;
         int n = candidate.Length;
@@ -260,11 +278,11 @@ public sealed class MyersBitParallel64Ascii
 
 /// <summary>
 /// Reusable, prepared pattern handle produced by
-/// <see cref="MyersBitParallel64Ascii.Prepare(string)"/>. Holds an
+/// <see cref="MyersBitParallel64.Prepare(string)"/>. Holds an
 /// <see cref="ArrayPool{T}"/>-rented bit-mask table that callers must
 /// release via <see cref="Dispose"/>.
 /// </summary>
-public readonly struct MyersPattern64Ascii : IDisposable
+public readonly struct MyersPattern64 : IDisposable
 {
     /// <summary>
     /// Bit-mask table indexed by mapped symbol value: <c>Masks[s]</c> is the
@@ -278,7 +296,7 @@ public readonly struct MyersPattern64Ascii : IDisposable
 
     /// <summary>
     /// Length of the pattern in <see cref="char"/> units, in the range
-    /// <c>[0, <see cref="MyersBitParallel64Ascii.MaxPatternLength"/>]</c>.
+    /// <c>[0, <see cref="MyersBitParallel64.MaxPatternLength"/>]</c>.
     /// </summary>
     public readonly int Length;
 
@@ -286,7 +304,7 @@ public readonly struct MyersPattern64Ascii : IDisposable
     /// 64-bit "alphabet" mask of every mapped symbol that occurs in the
     /// pattern. Each pattern symbol contributes a bit at position
     /// <c>(mapped &amp; 63)</c>. Useful as a hint to
-    /// <see cref="MyersBitParallel64Ascii.Distance(in MyersPattern64Ascii, string, int, ulong)"/>'s
+    /// <see cref="MyersBitParallel64.Distance(in MyersPattern64, string, int, ulong)"/>'s
     /// <c>requiredCharMask</c> parameter for callers that want to
     /// short-circuit candidates missing pattern symbols.
     /// </summary>
@@ -299,7 +317,7 @@ public readonly struct MyersPattern64Ascii : IDisposable
     /// </summary>
     public readonly int UniqueCharCount;
 
-    internal MyersPattern64Ascii(
+    internal MyersPattern64(
         ulong[]? masks,
         int length,
         ulong lastBitMask,

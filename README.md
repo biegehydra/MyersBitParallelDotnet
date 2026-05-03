@@ -57,7 +57,7 @@ Or in a `.csproj`:
 using MyersBitParallel;
 
 // Use one of the built-in engines.
-var engine = MyersBitParallel64Ascii.CaseInsensitive;
+var engine = MyersBitParallel64.AsciiCaseInsensitive;
 
 int distance = engine.Distance("kitten", "sitting"); // 3
 
@@ -69,8 +69,14 @@ The two ready-made engines are:
 
 | Engine                                       | Mapper                          | Behavior                              |
 | -------------------------------------------- | ------------------------------- | ------------------------------------- |
-| `MyersBitParallel64Ascii.CaseSensitive`      | `AsciiMappers.CaseSensitive`    | Differences in case are significant   |
-| `MyersBitParallel64Ascii.CaseInsensitive`    | `AsciiMappers.CaseInsensitive`  | Folds `A`–`Z` to `a`–`z`              |
+| `MyersBitParallel64.AsciiCaseSensitive`      | `AsciiMappers.CaseSensitive`    | Differences in case are significant   |
+| `MyersBitParallel64.AsciiCaseInsensitive`    | `AsciiMappers.CaseInsensitive`  | Folds `A`–`Z` to `a`–`z`              |
+
+The engine itself is alphabet-agnostic — it operates on whatever
+`byte` bucket your `Func<char, byte>` mapper returns. The two statics
+above are convenience instances wired with the built-in `AsciiMappers`;
+build your own engine with `new MyersBitParallel64(myMapper)` for any
+other mapping you like.
 
 ---
 
@@ -80,7 +86,7 @@ When you score one query against a large haystack, prepare the pattern
 once and pass it by `in`:
 
 ```csharp
-using MyersPattern64Ascii pat = engine.Prepare("kitten");
+using MyersPattern64 pat = engine.Prepare("kitten");
 foreach (string candidate in haystack)
 {
     int d = engine.Distance(in pat, candidate);
@@ -102,7 +108,7 @@ alphabet overlap, and an in-loop `score - remaining` cutoff to bail out as
 early as possible.
 
 ```csharp
-using MyersPattern64Ascii pat = engine.Prepare("apple");
+using MyersPattern64 pat = engine.Prepare("apple");
 
 foreach (string candidate in haystack)
 {
@@ -152,7 +158,7 @@ hot loop reads the table directly with no further delegate dispatch.
 // are kept verbatim. Note: collapsing to a single bucket only erases the
 // *identity* of those characters, not their position — both inputs still
 // need to have the same length and the same shape.
-var engine = new MyersBitParallel64Ascii(c =>
+var engine = new MyersBitParallel64(c =>
 {
     if ((uint)(c - 'A') < 26u) return (byte)(c | 0x20); // fold A-Z to a-z
     if ((uint)(c - 'a') < 26u) return (byte)c;          // a-z verbatim
@@ -174,22 +180,22 @@ int diff = engine.Distance("Hello, world!", "hello world"); // 2
 
 | Type                        | Description                                                                 |
 | --------------------------- | --------------------------------------------------------------------------- |
-| `MyersBitParallel64Ascii`   | The engine: pattern prep, distance, similarity ratio, char-mask helper      |
-| `MyersPattern64Ascii`       | Reusable prepared pattern, `IDisposable` to return its rented buffer        |
+| `MyersBitParallel64`        | The engine: pattern prep, distance, similarity ratio, char-mask helper      |
+| `MyersPattern64`            | Reusable prepared pattern, `IDisposable` to return its rented buffer        |
 | `SimilarityRatio`           | `(int Distance, double Ratio)` record struct                                |
 | `AsciiMappers.CaseSensitive` / `.CaseInsensitive` | Built-in `Func<char, byte>` mappers                  |
 
-Key methods on `MyersBitParallel64Ascii`:
+Key methods on `MyersBitParallel64`:
 
 ```csharp
 int Distance(string a, string b, int maxDist = int.MaxValue, ulong requiredCharMask = 0);
-int Distance(in MyersPattern64Ascii pattern, string candidate,
+int Distance(in MyersPattern64 pattern, string candidate,
              int maxDist = int.MaxValue, ulong requiredCharMask = 0);
 
 SimilarityRatio SimilarityRatio(string a, string b);
-SimilarityRatio SimilarityRatio(in MyersPattern64Ascii pattern, string candidate);
+SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate);
 
-MyersPattern64Ascii Prepare(string pattern);
+MyersPattern64 Prepare(string pattern);
 ulong BuildCharMask(string s);
 ```
 
@@ -200,9 +206,11 @@ ulong BuildCharMask(string s);
 
 ## Limitations
 
-- **ASCII only.** The engine takes a `Func<char, byte>` mapper. For
-  non-ASCII data you'd have to pre-fold to a byte representation
-  yourself, or wait for a future blocked-Myers Unicode kernel.
+- **Single-byte alphabet.** The engine maps each `char` to a single
+  `byte` via your `Func<char, byte>` mapper. Anything that fits into 256
+  buckets works (ASCII, Latin-1, a custom Unicode-fold table, etc.); for
+  full Unicode you'd have to pre-fold to a byte representation yourself,
+  or wait for a future blocked-Myers Unicode kernel.
 - **Pattern length capped at 64 characters** (the bit-vector is a single
   `ulong`). Throws `ArgumentException` on longer patterns.
 - **Candidate length is unrestricted.**

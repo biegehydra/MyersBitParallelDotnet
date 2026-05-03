@@ -10,13 +10,13 @@ namespace MyersBitParallelDotnet.Benchmarks;
 /// Myers' Prepare overhead).
 /// </summary>
 [MemoryDiagnoser]
-public class OneToOne64AsciiBenchmark
+public class OneToOne64Benchmark
 {
     [Params(50, 500)]
     public int PairCount;
 
     private (string Query, string Candidate)[] _pairs = null!;
-    private static readonly MyersBitParallel64Ascii Engine = MyersBitParallel64Ascii.CaseInsensitive;
+    private static readonly MyersBitParallel64 Engine = MyersBitParallel64.AsciiCaseInsensitive;
 
     [GlobalSetup]
     public void Setup()

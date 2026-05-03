@@ -25,7 +25,7 @@ namespace MyersBitParallelDotnet.Benchmarks;
 /// for fuzzy-search workloads.
 /// </remarks>
 [MemoryDiagnoser]
-public class OneToManyMaxDist64AsciiBenchmark
+public class OneToManyMaxDist64Benchmark
 {
     [Params(1, 2, 4)]
     public int MaxDist;
@@ -38,7 +38,7 @@ public class OneToManyMaxDist64AsciiBenchmark
     private ulong _requiredCharMask;
     private ulong _partialRequiredCharMask;
 
-    private static readonly MyersBitParallel64Ascii Engine = MyersBitParallel64Ascii.CaseInsensitive;
+    private static readonly MyersBitParallel64 Engine = MyersBitParallel64.AsciiCaseInsensitive;
 
     [GlobalSetup]
     public void Setup()
@@ -58,7 +58,7 @@ public class OneToManyMaxDist64AsciiBenchmark
     public long Myers_PreparedOnce_NoMaxDist()
     {
         long sum = 0;
-        using MyersPattern64Ascii pat = Engine.Prepare(_query);
+        using MyersPattern64 pat = Engine.Prepare(_query);
         for (int i = 0; i < _candidates.Length; i++)
             sum += Engine.Distance(in pat, _candidates[i]);
         return sum;
@@ -68,7 +68,7 @@ public class OneToManyMaxDist64AsciiBenchmark
     public long Myers_PreparedOnce_WithMaxDist()
     {
         long sum = 0;
-        using MyersPattern64Ascii pat = Engine.Prepare(_query);
+        using MyersPattern64 pat = Engine.Prepare(_query);
         int maxDist = MaxDist;
         for (int i = 0; i < _candidates.Length; i++)
         {
@@ -82,31 +82,13 @@ public class OneToManyMaxDist64AsciiBenchmark
     }
 
     [Benchmark]
-    public long Myers_PreparedOnce_WithMaxDist_AndRequiredCharMask()
+    public long NaiveLevenshteinReference_NoMaxDist()
     {
         long sum = 0;
-        using MyersPattern64Ascii pat = Engine.Prepare(_query);
         int maxDist = MaxDist;
-        ulong required = _requiredCharMask;
         for (int i = 0; i < _candidates.Length; i++)
         {
-            int d = Engine.Distance(in pat, _candidates[i], maxDist, required);
-            if (d != int.MaxValue) sum += d;
-        }
-        return sum;
-    }
-
-
-    [Benchmark]
-    public long Myers_PreparedOnce_WithMaxDist_AndPartialRequiredCharMask()
-    {
-        long sum = 0;
-        using MyersPattern64Ascii pat = Engine.Prepare(_query);
-        int maxDist = MaxDist;
-        ulong required = _partialRequiredCharMask;
-        for (int i = 0; i < _candidates.Length; i++)
-        {
-            int d = Engine.Distance(in pat, _candidates[i], maxDist, required);
+            int d = NaiveLevenshtein.CaseInsensitive(_query, _candidates[i]);
             if (d != int.MaxValue) sum += d;
         }
         return sum;
