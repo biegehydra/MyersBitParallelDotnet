@@ -10,8 +10,9 @@ using MyersBitParallelDotnet.Benchmarks;
 //   OneToOne64Benchmark            - 1:1 ASCII pairs through MyersBitParallel64
 //   OneToMany64Benchmark           - 1:N ASCII through MyersBitParallel64
 //   OneToManyMaxDist64Benchmark    - 1:N ASCII with maxDist + requiredCharMask pruning
+//   OneToManyBestMatch64Benchmark  - 1:N ASCII substring search via MyersSubstringBitParallel64
 
 var config = DefaultConfig.Instance
     .AddJob(Job.ShortRun);
 
-BenchmarkRunner.Run<OneToManyMaxDist64Benchmark>(config);
+BenchmarkRunner.Run<OneToManyBestMatch64Benchmark>(config);

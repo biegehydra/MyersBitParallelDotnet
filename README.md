@@ -4,6 +4,13 @@
 
 A high-throughput C# implementation of the **Myers bit-parallel Levenshtein
 distance algorithm**, optimized for ASCII patterns up to 64 characters.
+Ships two engines:
+
+- **`MyersBitParallel64`** — full-string edit distance between two equal-ish
+  length inputs.
+- **`MyersSubstringBitParallel64`** — *best-match* distance: the minimum
+  edit distance between a short pattern and any contiguous substring of a
+  longer haystack (a.k.a. semi-global / approximate substring search).
 
 The single-word kernel evaluates one whole DP row per `ulong` operation, so
 distance computation is `O(n)` machine instructions instead of `O(m·n)` cell
@@ -20,6 +27,9 @@ Wagner-Fischer DP, and **20×–200× faster** with the optional `maxDist` and
 
 - **Single-word Myers bit-parallel kernel.** Distance for ASCII patterns up
   to 64 characters in one `ulong` of state.
+- **Full-string and best-match substring modes.** `MyersBitParallel64` for
+  end-to-end Levenshtein; `MyersSubstringBitParallel64` for "find this
+  fuzzy term inside this longer text" via a single-pass semi-global kernel.
 - **Pattern reuse as a first-class API.** `Prepare` once, score many
   candidates without rebuilding the bit-mask table.
 - **Threshold-aware fuzzy search.** Pass `maxDist` to short-circuit
@@ -148,6 +158,65 @@ if you generate your own engine with at most 64 distinct values.
 
 ---
 
+## Best-match substring search
+
+`MyersSubstringBitParallel64` answers a different question than
+`MyersBitParallel64`: given a short pattern and a longer haystack, what's
+the *minimum edit distance to any contiguous substring of the haystack?*
+This is the "fuzzy find-in-string" operation — classically solved by
+semi-global DP filling an `(m+1) × (n+1)` matrix, here done in a single
+`O(n)` bit-parallel pass over the haystack.
+
+```csharp
+using MyersBitParallel;
+
+var engine = MyersSubstringBitParallel64.CaseInsensitive;
+
+int d = engine.BestMatchDistance("BOAT", "THE LONG MOAT OF THE CASTLE");
+// d == 1   (best window = "MOAT", one substitution)
+
+int same = engine.BestMatchDistance("HELLO", "SAY HELLO WORLD");
+// same == 0   (exact substring match)
+
+int fuzzy = engine.BestMatchDistance("JSMITH", "USER_ID=JSMTH42");
+// fuzzy == 1   (one deletion: "JSMTH")
+```
+
+Reuse a prepared pattern across many haystacks exactly like the full-string
+engine:
+
+```csharp
+using MyersSubstringPattern64 pat = engine.Prepare("jsmith");
+foreach (string row in logLines)
+{
+    if (engine.BestMatchDistance(in pat, row) <= 2)
+    {
+        // row contains something within 2 edits of "jsmith"
+    }
+}
+```
+
+Semantics in edge cases:
+
+- `BestMatchDistance("", text)` is `0` — the empty substring always matches.
+- `BestMatchDistance(pattern, "")` is `pattern.Length`.
+- When `pattern` is longer than `text`, the result is the minimum Levenshtein
+  distance between `pattern` and any substring of `text` (including the full
+  text), bounded below by `pattern.Length - text.Length`. Useful for ranking
+  short candidates against a longer query.
+
+The engine exposes the same constructors, `Prepare`, `CaseSensitive` /
+`CaseInsensitive` statics, and 64-char pattern limit as `MyersBitParallel64`.
+Key methods:
+
+```csharp
+int BestMatchDistance(string pattern, string text);
+int BestMatchDistance(in MyersSubstringPattern64 pattern, string text);
+MyersSubstringPattern64 Prepare(string query);
+```
+
+---
+
 ## Custom character mapper
 
 Pass any `Func<char, byte>` to the engine's constructor. It's called once
@@ -180,12 +249,14 @@ int diff = engine.Distance("Hello, world!", "hello world"); // 2
 
 ## API surface
 
-| Type                        | Description                                                                 |
-| --------------------------- | --------------------------------------------------------------------------- |
-| `MyersBitParallel64`        | The engine: pattern prep, distance, similarity ratio, char-mask helper      |
-| `MyersPattern64`            | Reusable prepared pattern, `IDisposable` to return its rented buffer        |
-| `SimilarityRatio`           | `(int Distance, double Ratio)` record struct                                |
-| `AsciiMappers.CaseSensitive` / `.CaseInsensitive` | Built-in `Func<char, byte>` mappers                  |
+| Type                              | Description                                                                 |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `MyersBitParallel64`              | Full-string engine: distance, similarity ratio, char-mask helper            |
+| `MyersPattern64`                  | Reusable prepared pattern for the full-string engine                        |
+| `MyersSubstringBitParallel64`     | Best-match substring engine                                                 |
+| `MyersSubstringPattern64`         | Reusable prepared pattern for the substring engine                          |
+| `SimilarityRatio`                 | `(int Distance, double Ratio)` record struct                                |
+| `AsciiMappers.CaseSensitive` / `.CaseInsensitive` | Built-in `Func<char, byte>` mappers                        |
 
 Key methods on `MyersBitParallel64`:
 
@@ -208,7 +279,16 @@ ulong BuildCharMask(string s);
 
 ## Benchmarks
 
-[BenchmarkDotNet](https://benchmarkdotnet.org/) (`OneToManyMaxDist64Benchmark`): one prepared query, 1000 noisy ASCII candidates, case-insensitive distance, `MyersBitParallel64.AsciiCaseInsensitive`. **Ratio** is each method’s mean time divided by the fastest row (lower is better).
+All benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) with the
+`ShortRun` job; **Ratio** is each method's mean time divided by the fastest
+row (lower is better). Machine, runtime, and job settings affect absolute
+numbers; see the [blog post](https://connorhallman.com/blog/optimizing-levenshtein)
+for full tables and methodology.
+
+### Full-string distance (`OneToManyMaxDist64Benchmark`)
+
+One prepared query, 1000 noisy ASCII candidates, case-insensitive distance,
+`MyersBitParallel64.AsciiCaseInsensitive`.
 
 | Method | MaxDist | CandidateCount | Mean | Ratio |
 |--------|--------:|---------------:|-----:|------:|
@@ -219,7 +299,27 @@ ulong BuildCharMask(string s);
 | `WagnerFischerReference_WithMaxDist` | 3 | 1000 | 42.496 μs | 7.85 |
 | `UkkonenReference_WithMaxDist` | 3 | 1000 | 51.068 μs | 9.43 |
 
-Machine, runtime, and job settings affect absolute numbers; see the [blog post](https://connorhallman.com/blog/optimizing-levenshtein) for full tables and methodology.
+### Best-match substring search (`OneToManyBestMatch64Benchmark`)
+
+Eight distinct ASCII queries each scored against `HaystackCount` haystacks
+(~10-word filler sentences with one noisy copy of the query embedded at a
+random offset). Case-insensitive; every reference is a fair apples-to-apples
+implementation of the same *min-over-substrings* quantity.
+
+| Method | HaystackCount | Mean | Ratio | Allocated |
+|--------|---------------:|-----:|------:|----------:|
+| `Myers_PreparedOnce`    |  100 |    0.65 ms |  1.00 |        0 B |
+| `Myers_PerCallPrepare`  |  100 |    0.72 ms |  1.10 |        0 B |
+| `SemiGlobal_TwoRow`     |  100 |    5.16 ms |  7.90 |   1,133 kB |
+| `SemiGlobal_FullMatrix` |  100 |    6.73 ms | 10.29 |   5,091 kB |
+| `Myers_PreparedOnce`    | 1000 |    6.91 ms |  1.00 |        0 B |
+| `Myers_PerCallPrepare`  | 1000 |    7.12 ms |  1.03 |        0 B |
+| `SemiGlobal_TwoRow`     | 1000 |   39.57 ms |  5.73 |  11,315 kB |
+| `SemiGlobal_FullMatrix` | 1000 |   65.42 ms |  9.47 |  50,834 kB |
+
+Measured on an Intel Core i5-12600K, .NET 10.0.5. The bit-parallel kernel is
+~6–10× faster than an equivalent-semantics semi-global Wagner-Fischer and
+allocates zero bytes per call vs. tens of megabytes for the DP references.
 
 ---
 
@@ -231,8 +331,8 @@ Machine, runtime, and job settings affect absolute numbers; see the [blog post](
   full Unicode you'd have to pre-fold to a byte representation yourself,
   or wait for a future blocked-Myers Unicode kernel.
 - **Pattern length capped at 64 characters** (the bit-vector is a single
-  `ulong`). Throws `ArgumentException` on longer patterns.
-- **Candidate length is unrestricted.**
+  `ulong`). Both engines throw `ArgumentException` on longer patterns.
+- **Candidate / haystack length is unrestricted.**
 
 ---
 

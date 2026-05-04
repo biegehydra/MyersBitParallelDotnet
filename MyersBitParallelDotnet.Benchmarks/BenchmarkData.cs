@@ -89,6 +89,96 @@ public static class BenchmarkData
     }
 
     /// <summary>
+    /// Build <paramref name="targetCount"/> "haystacks" — longer strings in
+    /// which a (possibly-noisy) copy of one of <paramref name="patterns"/>
+    /// is embedded at a random offset surrounded by filler tokens drawn from
+    /// <paramref name="filler"/>. Deterministic for a given <paramref name="seed"/>.
+    /// </summary>
+    /// <remarks>
+    /// Designed for substring / best-match benchmarking: the pattern-sized
+    /// window is always present, but it rarely starts at index zero and the
+    /// haystack is typically 5–10× longer than the pattern itself.
+    /// </remarks>
+    public static string[] BuildHaystacks(
+        string[] patterns,
+        string[] filler,
+        int targetCount,
+        int minFillerWords = 6,
+        int maxFillerWords = 12,
+        int seed = 42)
+    {
+        if (targetCount <= 0) return Array.Empty<string>();
+
+        var rnd = new Random(seed);
+        var result = new string[targetCount];
+        for (int i = 0; i < targetCount; i++)
+        {
+            string pattern = patterns[i % patterns.Length];
+            string noisy = Permute(pattern, rnd);
+
+            int leftWords = rnd.Next(minFillerWords, maxFillerWords + 1);
+            int rightWords = rnd.Next(minFillerWords, maxFillerWords + 1);
+
+            var sb = new System.Text.StringBuilder(noisy.Length + (leftWords + rightWords) * 8);
+            for (int w = 0; w < leftWords; w++)
+            {
+                sb.Append(filler[rnd.Next(filler.Length)]);
+                sb.Append(' ');
+            }
+            sb.Append(noisy);
+            for (int w = 0; w < rightWords; w++)
+            {
+                sb.Append(' ');
+                sb.Append(filler[rnd.Next(filler.Length)]);
+            }
+            result[i] = sb.ToString();
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// One haystack list per query slot — deterministic, disjoint RNG
+    /// streams, each haystack embeds a noisy copy of its query alongside
+    /// filler drawn from <paramref name="filler"/>.
+    /// </summary>
+    public static string[][] BuildHaystacksPerQuery(
+        string[] queries,
+        string[] filler,
+        int haystackCount,
+        int baseSeed = 42)
+    {
+        var rows = new string[queries.Length][];
+        for (int q = 0; q < queries.Length; q++)
+        {
+            // Each query gets its own pattern array so its own name is the
+            // guaranteed embedded substring.
+            rows[q] = BuildHaystacks(
+                new[] { queries[q] },
+                filler,
+                haystackCount,
+                seed: baseSeed + q * 97_169);
+        }
+        return rows;
+    }
+
+    /// <summary>
+    /// Plain-English filler tokens used to pad haystacks around an embedded
+    /// (noisy) pattern. All ASCII so every engine can consume them.
+    /// </summary>
+    public static readonly string[] AsciiFillerWords =
+    [
+        "THE", "WEATHER", "IN", "REPORT", "NEWS", "UPDATE", "BREAKING",
+        "LOCAL", "OFFICIAL", "ANNOUNCED", "STATEMENT", "FROM", "ABOUT",
+        "TRAFFIC", "ON", "AT", "WITH", "FOR", "HAS", "WAS", "WILL",
+        "TODAY", "YESTERDAY", "TOMORROW", "MORNING", "EVENING",
+        "NEAR", "OVER", "UNDER", "BETWEEN", "AFTER", "BEFORE",
+        "DRIVER", "PASSENGER", "PHONE", "USER", "RECORD", "FILE",
+        "AGENCY", "OFFICER", "POLICE", "COUNCIL", "MAYOR", "GOVERNOR",
+        "CONTRACT", "PROJECT", "DISTRICT", "MARKET", "COMPANY",
+        "JOHN", "DOE", "JANE", "SMITH", "MARIA", "DAVID", "KEVIN",
+    ];
+
+    /// <summary>
     /// One noisy candidate list per query slot (independent RNG streams via <paramref name="baseSeed"/> + offset).
     /// </summary>
     public static string[][] BuildNoisyCandidatesPerQuery(
