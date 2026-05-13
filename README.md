@@ -58,7 +58,7 @@ dotnet add package MyersBitParallel
 Or in a `.csproj`:
 
 ```xml
-<PackageReference Include="MyersBitParallel" Version="0.2.2" />
+<PackageReference Include="MyersBitParallel" Version="0.2.3" />
 ```
 
 ---

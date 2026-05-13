@@ -147,6 +147,21 @@ public sealed class MyersBitParallel64
     }
 
     /// <summary>
+    /// Compute the exact Levenshtein distance between <paramref name="a"/>
+    /// and <paramref name="b"/>, preparing and disposing a transient
+    /// pattern for <paramref name="a"/>. Unlike the
+    /// <see cref="Distance(string, string, int, ulong)"/> overload, this
+    /// path runs the unbounded kernel: no per-iteration prune branch and
+    /// no candidate char-mask prepass, so it is the fastest option when
+    /// callers do not need maxDist or required-character filtering.
+    /// </summary>
+    public int Distance(string a, string b)
+    {
+        using MyersPattern64 pat = Prepare(a);
+        return Distance(in pat, b);
+    }
+
+    /// <summary>
     /// Compute the Levenshtein distance between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
     /// Returns <see cref="int.MaxValue"/> when the distance is known to
@@ -188,6 +203,26 @@ public sealed class MyersBitParallel64
     }
 
     /// <summary>
+    /// Compute the exact Levenshtein distance between an already-prepared
+    /// <paramref name="pattern"/> and <paramref name="candidate"/>. Unlike
+    /// the <see cref="Distance(in MyersPattern64, string, int, ulong)"/>
+    /// overload, this path runs the unbounded kernel: no per-iteration
+    /// prune branch and no candidate char-mask prepass, so it is the
+    /// fastest option when callers do not need maxDist or
+    /// required-character filtering.
+    /// </summary>
+    public int Distance(in MyersPattern64 pattern, string candidate)
+    {
+        int m = pattern.Length;
+        int n = candidate.Length;
+
+        if (m == 0) return n;
+        if (n == 0) return m;
+
+        return UnboundedKernel(in pattern, candidate);
+    }
+
+    /// <summary>
     /// Compute distance and similarity ratio between <paramref name="a"/>
     /// and <paramref name="b"/>, preparing and disposing a transient
     /// pattern for <paramref name="a"/>.
@@ -215,6 +250,19 @@ public sealed class MyersBitParallel64
     }
 
     /// <summary>
+    /// Compute distance and similarity ratio between <paramref name="a"/>
+    /// and <paramref name="b"/>, preparing and disposing a transient
+    /// pattern for <paramref name="a"/>. Runs the unbounded kernel for
+    /// callers that do not need maxDist or required-character filtering.
+    /// </summary>
+    public SimilarityRatio SimilarityRatio(string a, string b)
+    {
+        using MyersPattern64 pat = Prepare(a);
+        int distance = Distance(in pat, b);
+        return BuildRatio(distance, a.Length, b.Length);
+    }
+
+    /// <summary>
     /// Compute distance and similarity ratio between an already-prepared
     /// <paramref name="pattern"/> and <paramref name="candidate"/>.
     /// </summary>
@@ -236,6 +284,18 @@ public sealed class MyersBitParallel64
     public SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate, int maxDist = int.MaxValue, ulong requiredCharMask = 0UL)
     {
         int distance = Distance(in pattern, candidate, maxDist, requiredCharMask);
+        return BuildRatio(distance, pattern.Length, candidate.Length);
+    }
+
+    /// <summary>
+    /// Compute distance and similarity ratio between an already-prepared
+    /// <paramref name="pattern"/> and <paramref name="candidate"/>. Runs
+    /// the unbounded kernel for callers that do not need maxDist or
+    /// required-character filtering.
+    /// </summary>
+    public SimilarityRatio SimilarityRatio(in MyersPattern64 pattern, string candidate)
+    {
+        int distance = Distance(in pattern, candidate);
         return BuildRatio(distance, pattern.Length, candidate.Length);
     }
 
@@ -319,6 +379,53 @@ public sealed class MyersBitParallel64
         }
 
         return score <= maxDist ? score : int.MaxValue;
+    }
+
+    private int UnboundedKernel(in MyersPattern64 pattern, string candidate)
+    {
+        int m = pattern.Length;
+        int n = candidate.Length;
+
+        ulong maskAll = pattern.MaskAll;
+        ulong lastBitMask = pattern.LastBitMask;
+        ulong VP = maskAll;
+        ulong VN = 0UL;
+        int score = m;
+
+        ref ulong patternRef = ref ArrayHelpers.GetArrayDataReference(pattern.Masks!);
+        ref byte mapRef = ref ArrayHelpers.GetArrayDataReference(_map);
+        ref char candRef = ref MemoryMarshal.GetReference(candidate.AsSpan());
+
+        for (int i = 0; i < n; i++)
+        {
+            char c = Unsafe.Add(ref candRef, i);
+            byte idx = Unsafe.Add(ref mapRef, (byte)c);
+            ulong PM = Unsafe.Add(ref patternRef, idx);
+
+            ulong X = PM | VN;
+            ulong D0 = (((X & VP) + VP) ^ VP) | X;
+            ulong HN = VP & D0;
+            ulong HP = VN | (~(VP | D0) & maskAll);
+
+            X = (HP << 1) | 1UL;
+            VN = X & D0;
+            VP = (HN << 1) | (~(X | D0) & maskAll);
+
+            if ((HP & lastBitMask) != 0)
+            {
+                score++;
+            }
+            else if ((HN & lastBitMask) != 0)
+            {
+                score--;
+            }
+
+            // slightly faster than bounded kernel
+            // because we lose one check every iteration
+            // here
+        }
+
+        return score;
     }
 }
 

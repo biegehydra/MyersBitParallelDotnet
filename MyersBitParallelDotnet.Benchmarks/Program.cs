@@ -13,6 +13,6 @@ using MyersBitParallelDotnet.Benchmarks;
 //   OneToManyBestMatch64Benchmark  - 1:N ASCII substring search via MyersSubstringBitParallel64
 
 var config = DefaultConfig.Instance
-    .AddJob(Job.ShortRun);
+    .AddJob(Job.MediumRun);
 
-BenchmarkRunner.Run<OneToManyBestMatch64Benchmark>(config);
+BenchmarkRunner.Run<OneToManyUnboundedKernel64Benchmark>(config);

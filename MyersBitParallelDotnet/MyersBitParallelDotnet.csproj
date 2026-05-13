@@ -18,7 +18,7 @@
     <IsPackable>true</IsPackable>
 
     <PackageId>MyersBitParallel</PackageId>
-    <Version>0.2.2</Version>
+    <Version>0.2.3</Version>
 
     <Authors>Connor Hallman</Authors>
     <Product>MyersBitParallel</Product>
